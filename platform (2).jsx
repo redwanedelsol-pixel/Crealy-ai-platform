@@ -1,0 +1,1799 @@
+import { useState, useEffect, useRef } from "react";
+
+// ── DESIGN TOKENS ─────────────────────────────────────────────
+const C = {
+  bg: "#06060a",
+  surface: "rgba(255,255,255,0.03)",
+  border: "rgba(255,255,255,0.07)",
+  primary: "#8b5cf6",
+  primaryLight: "#a78bfa",
+  text: "#f1eeff",
+  textSub: "#6b6b80",
+  textMuted: "#3a3a4a",
+};
+const glass = {
+  background: C.surface,
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  border: `1px solid ${C.border}`,
+  borderRadius: 16,
+};
+
+// ── ANIMATED BACKGROUND ───────────────────────────────────────
+function AnimatedBg() {
+  const ref = useRef(null);
+  const anim = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let W = canvas.width = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+    const onResize = () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; };
+    window.addEventListener("resize", onResize);
+    const orbs = [
+      { x:W*.2, y:H*.2, r:380, color:[139,92,246],  vx:.18,  vy:.12  },
+      { x:W*.8, y:H*.5, r:300, color:[192,132,252], vx:-.14, vy:.09  },
+      { x:W*.5, y:H*.9, r:240, color:[109,40,217],  vx:.10,  vy:-.16 },
+      { x:W*.1, y:H*.75,r:180, color:[167,139,250], vx:.20,  vy:-.08 },
+      { x:W*.9, y:H*.1, r:160, color:[216,180,254], vx:-.11, vy:.18  },
+    ];
+    const pts = Array.from({length:90}, ()=>({
+      x:Math.random()*W, y:Math.random()*H,
+      r:Math.random()*1.2+.2, a:Math.random()*Math.PI*2,
+      s:Math.random()*.3+.05, op:Math.random()*.4+.05,
+    }));
+    let t = 0;
+    const draw = () => {
+      t += .003;
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = C.bg; ctx.fillRect(0,0,W,H);
+      orbs.forEach(o => {
+        o.x+=o.vx; o.y+=o.vy;
+        if(o.x<-o.r||o.x>W+o.r) o.vx*=-1;
+        if(o.y<-o.r||o.y>H+o.r) o.vy*=-1;
+        const [r,g,b]=o.color;
+        const g1=ctx.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r);
+        g1.addColorStop(0,`rgba(${r},${g},${b},.14)`);
+        g1.addColorStop(.5,`rgba(${r},${g},${b},.05)`);
+        g1.addColorStop(1,`rgba(${r},${g},${b},0)`);
+        ctx.fillStyle=g1; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,Math.PI*2); ctx.fill();
+      });
+      ctx.strokeStyle="rgba(139,92,246,.04)"; ctx.lineWidth=1;
+      for(let x=0;x<W;x+=64){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<H;y+=64){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      pts.forEach(p => {
+        p.a+=p.s*.01; p.x+=Math.cos(p.a+t)*.3; p.y+=Math.sin(p.a*.7+t)*.3;
+        if(p.x<0)p.x=W; if(p.x>W)p.x=0; if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+        const pulse=.5+Math.sin(t*2+p.a)*.5;
+        ctx.fillStyle=`rgba(167,139,250,${p.op*pulse})`;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+      });
+      const sy=(t*40)%(H+120)-60;
+      const sg=ctx.createLinearGradient(0,sy-60,0,sy+60);
+      sg.addColorStop(0,"transparent"); sg.addColorStop(.5,"rgba(139,92,246,.025)"); sg.addColorStop(1,"transparent");
+      ctx.fillStyle=sg; ctx.fillRect(0,sy-60,W,120);
+      anim.current=requestAnimationFrame(draw);
+    };
+    anim.current=requestAnimationFrame(draw);
+    return ()=>{ cancelAnimationFrame(anim.current); window.removeEventListener("resize",onResize); };
+  },[]);
+  return <canvas ref={ref} style={{position:"fixed",inset:0,width:"100%",height:"100%",zIndex:0,pointerEvents:"none"}} />;
+}
+
+// ── DATA ──────────────────────────────────────────────────────
+const PLANS_DATA = [
+  { id:"standard", name:"Starter", monthlyPrice:9,  credits:"80",  unlimited:false, color:"#6ee7b7",
+    features:["Images jusqu'à 512px","Vidéos jusqu'à 30s","File standard","Support email"] },
+  { id:"medium",   name:"Pro",     monthlyPrice:19, credits:"300", unlimited:false, color:"#a78bfa",
+    features:["Images jusqu'à 1024px","Vidéos jusqu'à 2 min","File prioritaire","Support chat"] },
+  { id:"premium",  name:"Ultime",  monthlyPrice:49, credits:"∞",   unlimited:true,  color:"#c084fc",
+    features:["Images 4K","Vidéos jusqu'à 10 min","File VIP","Support dédié 24/7"] },
+];
+const TOOLS = [
+  { id:"image", icon:"✦", label:"Éditeur Image",  desc:"Détecte & modifie des objets précis avec l'IA",    cost:5,  unit:"/ génération", formats:"JPG PNG WEBP", color:"#a78bfa" },
+  { id:"video", icon:"▶", label:"Montage TikTok", desc:"Génère des montages vidéo dynamiques pour TikTok",  cost:10, unit:"/ minute",      formats:"MP4 MOV AVI",  color:"#f472b6" },
+  { id:"swap",  icon:"⟳", label:"Person Swap",    desc:"Remplace une personne dans une vidéo par l'IA",     cost:3,  unit:"/ seconde",     formats:"MP4 MOV",      color:"#34d399" },
+];
+const HISTORY = [
+  { name:"product_edit_final.png", type:"image", date:"Aujourd'hui", time:"14:32", credits:5  },
+  { name:"tiktok_montage_v3.mp4",  type:"video", date:"Aujourd'hui", time:"09:15", credits:30 },
+  { name:"video_swap_001.mp4",     type:"swap",  date:"Hier",        time:"22:40", credits:18 },
+  { name:"banner_edit_v2.png",     type:"image", date:"Hier",        time:"17:05", credits:5  },
+  { name:"reel_promo.mp4",         type:"video", date:"20 Avr",      time:"11:20", credits:20 },
+];
+const NAV = [
+  { id:"dashboard", label:"Dashboard",  icon:"⊞" },
+  { id:"editor",    label:"Éditeur",    icon:"✦" },
+  { id:"history",   label:"Historique", icon:"◷" },
+  { id:"billing",   label:"Abonnement", icon:"◈" },
+  { id:"account",   label:"Mon compte", icon:"◎" },
+];
+
+// ── HELPERS ───────────────────────────────────────────────────
+function useCount(target, go) {
+  const [v,setV]=useState(0);
+  useEffect(()=>{
+    if(!go)return;
+    let n=0; const step=Math.ceil(target/40);
+    const iv=setInterval(()=>{ n=Math.min(n+step,target); setV(n); if(n>=target)clearInterval(iv); },18);
+    return ()=>clearInterval(iv);
+  },[target,go]);
+  return v;
+}
+function Ring({pct,color,size=48,stroke=3}){
+  const r=(size-stroke)/2, c=2*Math.PI*r;
+  return(
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)",flexShrink:0}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${(pct/100)*c} ${c}`} strokeLinecap="round"
+        style={{transition:"stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)"}}/>
+    </svg>
+  );
+}
+function Label({step,text}){
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+      <span style={{fontSize:10,color:C.primary,fontWeight:700,letterSpacing:1}}>{step}</span>
+      <div style={{width:1,height:12,background:"rgba(139,92,246,.3)"}}/>
+      <span style={{fontSize:10,color:C.textSub,letterSpacing:1.5,fontWeight:600,textTransform:"uppercase"}}>{text}</span>
+    </div>
+  );
+}
+function VisaIcon(){return(<svg width="36"height="22"viewBox="0 0 36 22"fill="none"><rect width="36"height="22"rx="4"fill="#1434CB"/><text x="4"y="16"fontFamily="Arial"fontWeight="800"fontSize="12"fill="white">VISA</text></svg>);}
+function McIcon(){return(<svg width="36"height="22"viewBox="0 0 36 22"fill="none"><rect width="36"height="22"rx="4"fill="#252525"/><circle cx="13"cy="11"r="7"fill="#EB001B"/><circle cx="23"cy="11"r="7"fill="#F79E1B"/><path d="M18 5.5a7 7 0 0 1 0 11A7 7 0 0 1 18 5.5z"fill="#FF5F00"/></svg>);}
+function AmexIcon(){return(<svg width="36"height="22"viewBox="0 0 36 22"fill="none"><rect width="36"height="22"rx="4"fill="#2E77BC"/><text x="3"y="15"fontFamily="Arial"fontWeight="700"fontSize="9"fill="white">AMEX</text></svg>);}
+function PayPalLogo({size=16}){return(<svg width={size*2.6}height={size}viewBox="0 0 80 28"fill="none"><text x="0"y="22"fontFamily="Arial"fontWeight="800"fontSize="22"fill="#003087">Pay</text><text x="30"y="22"fontFamily="Arial"fontWeight="800"fontSize="22"fill="#009cde">Pal</text></svg>);}
+
+// ── APP ───────────────────────────────────────────────────────
+export default function App() {
+  const [page,setPage]   = useState("auth");      // start on auth
+  const [authMode,setAuthMode] = useState("login"); // "login"|"signup"|"forgot"
+  const [user,setUser]   = useState(null);          // null = not logged in
+  const [tool,setTool]   = useState("image");
+  const [userPlan,setUserPlan] = useState("medium");
+  const [credits,setCredits]   = useState(247);
+  const [dragging,setDragging] = useState(false);
+  const [file,setFile]         = useState(null);
+  const [processing,setProcessing] = useState(false);
+  const [progress,setProgress]     = useState(0);
+  const [done,setDone]             = useState(false);
+  const [prompt,setPrompt]         = useState("");
+  const [histFilter,setHistFilter] = useState("all");
+  const [isMobile,setIsMobile]     = useState(window.innerWidth < 768);
+  const fileRef = useRef();
+
+  useEffect(()=>{
+    const fn=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener("resize",fn); return ()=>window.removeEventListener("resize",fn);
+  },[]);
+
+  const plan       = PLANS_DATA.find(p=>p.id===userPlan);
+  const isUnlimited= plan?.unlimited;
+  const activeTool = TOOLS.find(t=>t.id===tool);
+  const totalCr    = userPlan==="standard"?80:userPlan==="medium"?300:9999;
+  const creditPct  = isUnlimited?100:Math.round((credits/totalCr)*100);
+  const g1=useCount(47,page==="dashboard");
+  const g2=useCount(23,page==="dashboard");
+  const g3=useCount(12,page==="dashboard");
+  const filtered   = histFilter==="all"?HISTORY:HISTORY.filter(h=>h.type===histFilter);
+
+  function simulate(){
+    if(!file&&!prompt)return;
+    setProcessing(true); setDone(false); setProgress(0);
+    let p=0;
+    const iv=setInterval(()=>{
+      p+=Math.random()*7+2;
+      if(p>=100){ clearInterval(iv); setTimeout(()=>{ setProcessing(false); setDone(true); if(!isUnlimited)setCredits(c=>Math.max(0,c-activeTool.cost)); },350); p=100; }
+      setProgress(Math.round(p));
+    },90);
+  }
+
+  // ── AUTH GUARD ────────────────────────────────────────────
+  if (!user) {
+    return <AuthPage isMobile={isMobile} authMode={authMode} setAuthMode={setAuthMode} onSuccess={(u)=>{ setUser(u); setPage("dashboard"); }}/>;
+  }
+
+  // ── SIDEBAR (desktop) ─────────────────────────────────────
+  const Sidebar = () => (
+    <aside style={{
+      width:220,flexShrink:0,position:"fixed",inset:"0 auto 0 0",zIndex:50,
+      background:"rgba(6,6,10,.85)",backdropFilter:"blur(28px)",WebkitBackdropFilter:"blur(28px)",
+      borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",
+    }}>
+      {/* Logo — no icon, just wordmark */}
+      <div style={{padding:"24px 20px 20px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,letterSpacing:2,
+          background:"linear-gradient(135deg,#a78bfa,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+          CRÉALY
+        </div>
+        <div style={{fontSize:9,color:C.textMuted,letterSpacing:3,marginTop:2}}>AI PLATFORM</div>
+      </div>
+
+      {/* Nav */}
+      <nav style={{flex:1,padding:"14px 10px",display:"flex",flexDirection:"column",gap:2}}>
+        <div style={{fontSize:9,color:C.textMuted,letterSpacing:2.5,padding:"8px 10px 6px",fontWeight:600}}>NAVIGATION</div>
+        {NAV.map(n=>{
+          const active=page===n.id;
+          return(
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              display:"flex",alignItems:"center",gap:10,
+              background:active?"rgba(139,92,246,.12)":"transparent",
+              color:active?C.primaryLight:C.textSub,
+              border:"none",borderRadius:10,
+              borderLeft:`2px solid ${active?C.primary:"transparent"}`,
+              padding:"10px 12px",fontFamily:"inherit",
+              fontSize:12,fontWeight:active?600:400,cursor:"pointer",
+              width:"100%",textAlign:"left",transition:"all .15s",
+            }}>
+              <span style={{fontSize:14,opacity:active?1:.4}}>{n.icon}</span>
+              {n.label}
+              {active&&<div style={{marginLeft:"auto",width:5,height:5,borderRadius:"50%",background:C.primary,boxShadow:`0 0 8px ${C.primary}`}}/>}
+            </button>
+          );
+        })}
+        <div style={{fontSize:9,color:C.textMuted,letterSpacing:2.5,padding:"18px 10px 6px",fontWeight:600}}>OUTILS RAPIDES</div>
+        {TOOLS.map(t=>(
+          <button key={t.id} onClick={()=>{setPage("editor");setTool(t.id);setDone(false);setFile(null);}} style={{
+            display:"flex",alignItems:"center",gap:9,
+            background:"transparent",color:C.textMuted,border:"none",
+            borderRadius:10,padding:"8px 12px",fontFamily:"inherit",
+            fontSize:11,cursor:"pointer",width:"100%",textAlign:"left",transition:"all .15s",
+          }}>
+            <span style={{color:t.color,fontSize:12}}>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Credit widget */}
+      <div style={{margin:"0 10px 10px",...glass,borderRadius:14,padding:16,border:"1px solid rgba(139,92,246,.15)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:9,color:C.textMuted,letterSpacing:2,marginBottom:4,fontWeight:600}}>CRÉDITS</div>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:30,color:plan?.color,lineHeight:1,fontWeight:800}}>
+              {isUnlimited?"∞":credits}
+            </div>
+            {!isUnlimited&&<div style={{fontSize:9,color:C.textMuted,marginTop:2}}>sur {totalCr} ce mois</div>}
+          </div>
+          <Ring pct={creditPct} color={plan?.color} size={44} stroke={3}/>
+        </div>
+        {!isUnlimited&&(
+          <div style={{height:3,background:"rgba(255,255,255,.06)",borderRadius:99,overflow:"hidden",marginBottom:8}}>
+            <div style={{height:"100%",width:`${creditPct}%`,background:`linear-gradient(90deg,${plan?.color}88,${plan?.color})`,borderRadius:99,transition:"width 1s ease"}}/>
+          </div>
+        )}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:9,fontWeight:600,color:plan?.color,background:`${plan?.color}18`,padding:"3px 10px",borderRadius:99,letterSpacing:1}}>{plan?.name.toUpperCase()}</span>
+          <button onClick={()=>setPage("billing")} style={{background:"none",border:"none",color:C.textMuted,fontSize:9,cursor:"pointer",fontFamily:"inherit"}}>Changer →</button>
+        </div>
+      </div>
+
+      {/* User */}
+      <div onClick={()=>setPage("account")} style={{padding:"12px 20px",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background .15s"}}
+        onMouseEnter={e=>e.currentTarget.style.background="rgba(139,92,246,.06)"}
+        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+        <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#7c3aed,#c084fc)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",flexShrink:0}}>
+          {(user?.name||"A")[0].toUpperCase()}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,color:C.text,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.name||"Utilisateur"}</div>
+          <div style={{fontSize:10,color:C.textMuted}}>Plan {plan?.name}</div>
+        </div>
+        <span style={{fontSize:12,color:C.textMuted}}>›</span>
+      </div>
+    </aside>
+  );
+
+  // ── MOBILE BOTTOM NAV ────────────────────────────────────
+  const MobileNav = () => (
+    <nav style={{
+      position:"fixed",bottom:0,left:0,right:0,zIndex:50,
+      background:"rgba(6,6,10,.92)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",
+      borderTop:`1px solid ${C.border}`,
+      display:"flex",
+    }}>
+      {NAV.map(n=>{
+        const active=page===n.id;
+        return(
+          <button key={n.id} onClick={()=>setPage(n.id)} style={{
+            flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+            gap:4,padding:"10px 4px 14px",
+            background:"none",border:"none",cursor:"pointer",
+            color:active?C.primaryLight:C.textMuted,
+            transition:"color .15s",
+          }}>
+            <span style={{fontSize:18,lineHeight:1}}>{n.icon}</span>
+            <span style={{fontSize:9,fontWeight:active?600:400,letterSpacing:.5}}>{n.label}</span>
+            {active&&<div style={{position:"absolute",bottom:0,width:24,height:2,background:C.primary,borderRadius:99}}/>}
+          </button>
+        );
+      })}
+    </nav>
+  );
+
+  // ── MOBILE TOPBAR ────────────────────────────────────────
+  const MobileTopbar = () => (
+    <header style={{
+      position:"sticky",top:0,zIndex:40,height:52,
+      background:"rgba(6,6,10,.85)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",
+      borderBottom:`1px solid ${C.border}`,
+      display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",
+    }}>
+      <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,letterSpacing:2,
+        background:"linear-gradient(135deg,#a78bfa,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+        CRÉALY
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,
+        background:"rgba(139,92,246,.12)",border:"1px solid rgba(139,92,246,.25)",
+        borderRadius:99,padding:"5px 12px"}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:plan?.color,boxShadow:`0 0 8px ${plan?.color}`}}/>
+        <span style={{fontSize:11,color:plan?.color,fontWeight:600}}>{plan?.name}</span>
+        <span style={{fontSize:11,color:C.textSub}}>·</span>
+        <span style={{fontSize:11,color:C.text,fontWeight:600}}>{isUnlimited?"∞":credits} cr.</span>
+      </div>
+    </header>
+  );
+
+  // ── DESKTOP TOPBAR ───────────────────────────────────────
+  const DesktopTopbar = () => (
+    <header style={{
+      height:56,position:"sticky",top:0,zIndex:40,
+      background:"rgba(6,6,10,.7)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",
+      borderBottom:`1px solid ${C.border}`,
+      display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 32px",
+    }}>
+      <span style={{fontSize:11,color:C.textMuted,fontWeight:500,letterSpacing:1.5,textTransform:"uppercase"}}>
+        {NAV.find(n=>n.id===page)?.label}
+      </span>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:11,color:C.textMuted}}>Mer. 22 Avr 2026</span>
+        <div style={{width:1,height:16,background:C.border}}/>
+        <div style={{display:"flex",alignItems:"center",gap:6,background:"rgba(139,92,246,.12)",border:"1px solid rgba(139,92,246,.25)",borderRadius:99,padding:"5px 12px"}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:plan?.color,boxShadow:`0 0 8px ${plan?.color}`}}/>
+          <span style={{fontSize:11,color:plan?.color,fontWeight:600}}>{plan?.name}</span>
+          <span style={{fontSize:11,color:C.textSub}}>·</span>
+          <span style={{fontSize:11,color:C.text,fontWeight:600}}>{isUnlimited?"∞":credits} cr.</span>
+        </div>
+      </div>
+    </header>
+  );
+
+  const pad = isMobile ? "20px 16px 100px" : "32px 36px";
+  const maxW = 960;
+
+  return (
+    <div style={{display:"flex",minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Inter',system-ui,sans-serif",position:"relative",fontSize:13}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:3px;} ::-webkit-scrollbar-thumb{background:#2a2040;border-radius:4px;}
+        @keyframes spin   {to{transform:rotate(360deg)}}
+        @keyframes fadeUp {from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes gradPan{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+        .card{transition:transform .2s,border-color .25s,box-shadow .25s;}
+        .card:hover{transform:translateY(-2px);border-color:rgba(139,92,246,.25)!important;box-shadow:0 8px 32px rgba(139,92,246,.08);}
+        .ttab{transition:all .15s;}
+        .ttab:hover{background:rgba(139,92,246,.1)!important;}
+        .pcrd{transition:all .22s;cursor:pointer;}
+        .pcrd:hover{transform:translateY(-4px);box-shadow:0 16px 48px rgba(139,92,246,.15);}
+        .hrow{transition:background .1s;cursor:pointer;}
+        .hrow:hover{background:rgba(255,255,255,.02)!important;}
+        .cpk{transition:all .15s;cursor:pointer;}
+        .cpk:hover{border-color:rgba(139,92,246,.5)!important;background:rgba(139,92,246,.06)!important;}
+        .gbtn{transition:all .18s;}
+        .gbtn:hover:not(:disabled){filter:brightness(1.12);transform:translateY(-1px);box-shadow:0 8px 24px rgba(139,92,246,.4);}
+        input[type=radio]{accent-color:#8b5cf6;}
+        textarea:focus{outline:none;border-color:rgba(139,92,246,.45)!important;box-shadow:0 0 0 3px rgba(139,92,246,.08);}
+        input:focus{outline:none;border-color:rgba(139,92,246,.45)!important;}
+      `}</style>
+      <AnimatedBg/>
+
+      {!isMobile && <Sidebar/>}
+
+      <div style={{marginLeft:isMobile?0:220,flex:1,display:"flex",flexDirection:"column",minHeight:"100vh",position:"relative",zIndex:1}}>
+        {isMobile ? <MobileTopbar/> : <DesktopTopbar/>}
+
+        <main style={{flex:1,padding:pad,overflowY:"auto"}}>
+
+          {/* ═══ DASHBOARD ═══ */}
+          {page==="dashboard" && (
+            <div style={{animation:"fadeUp .35s ease",maxWidth:maxW}}>
+              <div style={{marginBottom:28}}>
+                <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>TABLEAU DE BORD</div>
+                <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?28:38,fontWeight:800,color:C.text,lineHeight:1.1}}>
+                  Bonjour, Alex{" "}
+                  <span style={{background:"linear-gradient(135deg,#8b5cf6,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>✦</span>
+                </h1>
+                <p style={{fontSize:12,color:C.textSub,marginTop:8}}>Vue d'ensemble de votre activité ce mois-ci.</p>
+              </div>
+
+              {/* KPIs */}
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:10,marginBottom:20}}>
+                {[
+                  {label:"Crédits",       value:isUnlimited?"∞":credits, sub:isUnlimited?"Illimités":`sur ${totalCr}`, color:plan?.color, ring:creditPct},
+                  {label:"Générations",   value:g1, sub:"ce mois",           color:"#a78bfa", ring:60},
+                  {label:"Fichiers",      value:g2, sub:"images & vidéos",    color:"#c084fc", ring:46},
+                  {label:"Heures éco.",   value:g3, sub:"vs montage manuel",  color:"#818cf8", ring:80},
+                ].map((k,i)=>(
+                  <div key={i} className="card" style={{...glass,padding:"18px 16px 14px"}}>
+                    <div style={{fontSize:9,color:C.textMuted,letterSpacing:1.5,marginBottom:10,fontWeight:600}}>{k.label.toUpperCase()}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                      <div>
+                        <div style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?28:34,color:k.color,lineHeight:1,fontWeight:800}}>{k.value}</div>
+                        <div style={{fontSize:9,color:C.textMuted,marginTop:4}}>{k.sub}</div>
+                      </div>
+                      <Ring pct={k.ring} color={k.color} size={34} stroke={3}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tools + Activity */}
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 300px",gap:14}}>
+                <div>
+                  <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:12,fontWeight:600}}>OUTILS DISPONIBLES</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {TOOLS.map(t=>(
+                      <div key={t.id} className="card" onClick={()=>{setPage("editor");setTool(t.id);}} style={{...glass,padding:"16px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
+                        <div style={{width:40,height:40,borderRadius:12,flexShrink:0,background:`${t.color}15`,border:`1px solid ${t.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:t.color}}>{t.icon}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,color:C.text,fontWeight:600,marginBottom:2}}>{t.label}</div>
+                          <div style={{fontSize:11,color:C.textSub,lineHeight:1.4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.desc}</div>
+                        </div>
+                        <div style={{textAlign:"right",flexShrink:0}}>
+                          <div style={{fontFamily:"'Syne',sans-serif",fontSize:16,color:t.color,fontWeight:800}}>{t.cost} cr.</div>
+                          <div style={{fontSize:9,color:C.textMuted}}>{t.unit}</div>
+                        </div>
+                        <span style={{color:C.textMuted,fontSize:14,marginLeft:2}}>›</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {!isMobile && (
+                  <div>
+                    <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:12,fontWeight:600}}>ACTIVITÉ RÉCENTE</div>
+                    <div style={{...glass,overflow:"hidden"}}>
+                      {HISTORY.slice(0,5).map((r,i)=>{
+                        const t=TOOLS.find(x=>x.id===r.type);
+                        return(
+                          <div key={i} className="hrow" style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderBottom:i<4?`1px solid ${C.border}`:"none"}}>
+                            <div style={{width:26,height:26,borderRadius:8,background:`${t?.color}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:t?.color,flexShrink:0}}>{t?.icon}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:11,color:C.text,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div>
+                              <div style={{fontSize:9,color:C.textMuted,marginTop:2}}>{r.date} · {r.time}</div>
+                            </div>
+                            <span style={{fontSize:10,color:C.textMuted,flexShrink:0}}>−{r.credits} cr.</span>
+                          </div>
+                        );
+                      })}
+                      <div style={{padding:"10px 16px",borderTop:`1px solid ${C.border}`}}>
+                        <button onClick={()=>setPage("history")} style={{background:"none",border:"none",color:C.primary,fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>Voir tout →</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile: recent activity below */}
+              {isMobile && (
+                <div style={{marginTop:16}}>
+                  <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:12,fontWeight:600}}>ACTIVITÉ RÉCENTE</div>
+                  <div style={{...glass,overflow:"hidden"}}>
+                    {HISTORY.slice(0,4).map((r,i)=>{
+                      const t=TOOLS.find(x=>x.id===r.type);
+                      return(
+                        <div key={i} className="hrow" style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderBottom:i<3?`1px solid ${C.border}`:"none"}}>
+                          <div style={{width:26,height:26,borderRadius:8,background:`${t?.color}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:t?.color,flexShrink:0}}>{t?.icon}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,color:C.text,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div>
+                            <div style={{fontSize:9,color:C.textMuted,marginTop:2}}>{r.date} · {r.time}</div>
+                          </div>
+                          <span style={{fontSize:10,color:C.textMuted,flexShrink:0}}>−{r.credits} cr.</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ EDITOR ═══ */}
+          {page==="editor" && (
+            <EditorPage
+              isMobile={isMobile} tool={tool} setTool={setTool}
+              activeTool={activeTool} isUnlimited={isUnlimited}
+              plan={plan} credits={credits} setCredits={setCredits}
+              file={file} setFile={setFile} fileRef={fileRef}
+              dragging={dragging} setDragging={setDragging}
+              processing={processing} setProcessing={setProcessing}
+              progress={progress} setProgress={setProgress}
+              done={done} setDone={setDone}
+              prompt={prompt} setPrompt={setPrompt}
+              simulate={simulate}
+            />
+          )}
+
+          {/* ═══ HISTORY ═══ */}
+          {page==="history" && (
+            <div style={{animation:"fadeUp .35s ease",maxWidth:maxW}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:isMobile?"flex-start":"flex-end",flexDirection:isMobile?"column":"row",gap:14,marginBottom:24}}>
+                <div>
+                  <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>HISTORIQUE</div>
+                  <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?24:32,fontWeight:800,color:C.text}}>Mes générations</h2>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {[{id:"all",label:"Tout"},{id:"image",label:"✦ Image"},{id:"video",label:"▶ Vidéo"},{id:"swap",label:"⟳ Swap"}].map(f=>(
+                    <button key={f.id} onClick={()=>setHistFilter(f.id)} style={{
+                      background:histFilter===f.id?"rgba(139,92,246,.12)":"transparent",
+                      border:`1px solid ${histFilter===f.id?"rgba(139,92,246,.35)":C.border}`,
+                      color:histFilter===f.id?C.primaryLight:C.textSub,
+                      borderRadius:9,padding:"6px 14px",cursor:"pointer",
+                      fontFamily:"inherit",fontSize:11,fontWeight:histFilter===f.id?600:400,
+                    }}>{f.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(3,1fr)",gap:10,marginBottom:18}}>
+                {[
+                  {label:"Total",           value:HISTORY.length,                            color:"#a78bfa"},
+                  {label:"Crédits consommés",value:HISTORY.reduce((a,b)=>a+b.credits,0),     color:"#c084fc"},
+                  {label:"Succès",          value:"100%",                                    color:"#4ade80"},
+                ].map((s,i)=>(
+                  <div key={i} style={{...glass,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:11,color:C.textSub}}>{s.label}</span>
+                    <span style={{fontFamily:"'Syne',sans-serif",fontSize:20,color:s.color,fontWeight:800}}>{s.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {isMobile ? (
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {filtered.map((r,i)=>{
+                    const t=TOOLS.find(x=>x.id===r.type);
+                    return(
+                      <div key={i} className="hrow" style={{...glass,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                        <div style={{width:36,height:36,borderRadius:10,background:`${t?.color}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:t?.color,flexShrink:0}}>{t?.icon}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,color:C.text,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div>
+                          <div style={{fontSize:10,color:C.textSub,marginTop:2}}>{t?.label} · {r.date}</div>
+                        </div>
+                        <div style={{textAlign:"right",flexShrink:0}}>
+                          <div style={{fontSize:10,color:C.textMuted}}>−{r.credits} cr.</div>
+                          <div style={{fontSize:9,color:"#4ade80",marginTop:2}}>● OK</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{...glass,overflow:"hidden"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"36px 1fr 110px 140px 80px 60px",padding:"10px 20px",borderBottom:`1px solid ${C.border}`,fontSize:9,color:C.textMuted,letterSpacing:2,gap:10,fontWeight:600}}>
+                    <span/><span>FICHIER</span><span>OUTIL</span><span>DATE</span><span>CRÉDITS</span><span>STATUT</span>
+                  </div>
+                  {filtered.map((r,i)=>{
+                    const t=TOOLS.find(x=>x.id===r.type);
+                    return(
+                      <div key={i} className="hrow" style={{display:"grid",gridTemplateColumns:"36px 1fr 110px 140px 80px 60px",padding:"14px 20px",gap:10,alignItems:"center",borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none"}}>
+                        <div style={{width:28,height:28,borderRadius:8,background:`${t?.color}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:t?.color}}>{t?.icon}</div>
+                        <span style={{fontSize:12,color:C.text,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</span>
+                        <span style={{fontSize:11,color:t?.color,fontWeight:500}}>{t?.label}</span>
+                        <span style={{fontSize:11,color:C.textSub}}>{r.date} · {r.time}</span>
+                        <span style={{fontSize:11,color:C.textSub}}>−{r.credits} cr.</span>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}>
+                          <div style={{width:5,height:5,borderRadius:"50%",background:"#4ade80",boxShadow:"0 0 6px #4ade80"}}/>
+                          <span style={{fontSize:10,color:"#4ade80",fontWeight:500}}>OK</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ BILLING ═══ */}
+          {page==="billing" && (
+            <BillingPage
+              plan={plan} userPlan={userPlan} setUserPlan={setUserPlan}
+              credits={credits} setCredits={setCredits} isUnlimited={isUnlimited}
+              isMobile={isMobile}
+            />
+          )}
+
+          {/* ═══ ACCOUNT ═══ */}
+          {page==="account" && (
+            <AccountPage user={user} setUser={setUser} plan={plan} credits={credits} isUnlimited={isUnlimited} isMobile={isMobile} onLogout={()=>{ setUser(null); setPage("dashboard"); setAuthMode("login"); }}/>
+          )}
+        </main>
+      </div>
+
+      {isMobile && <MobileNav/>}
+    </div>
+  );
+}
+
+// ── MOCK AI RESULTS ───────────────────────────────────────────
+function MockImage({seed,modified,toolColor,toolId}){
+  const rng=(n)=>((seed*13+n*7+31)%100)/100;
+  const shapes=Array.from({length:6},(_,i)=>({x:10+rng(i*3)*80,y:10+rng(i*3+1)*70,w:8+rng(i*3+2)*30,h:8+rng(i*3+2)*25,r:rng(i)*180,hue:modified?(200+i*40):(30+i*40),sat:modified?"70%":"40%",lit:modified?"65%":"45%",op:0.5+rng(i)*0.5,round:rng(i+10)*20}));
+  const accentCol=modified?`hsl(${toolId==="image"?280:toolId==="video"?330:160},80%,70%)`:`hsl(30,60%,60%)`;
+  return(
+    <svg viewBox="0 0 200 140" style={{width:"100%",height:"100%",display:"block"}}>
+      <defs>
+        <linearGradient id={`bg${seed}${modified}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={modified?"#1a0a2e":"#1a1210"}/><stop offset="100%" stopColor={modified?"#0d0520":"#100c08"}/>
+        </linearGradient>
+        <radialGradient id={`gl${seed}${modified}`} cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor={modified?`hsla(260,70%,50%,.25)`:`hsla(25,60%,40%,.2)`}/><stop offset="100%" stopColor="transparent"/>
+        </radialGradient>
+        {modified&&<filter id={`glow${seed}`}><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>}
+      </defs>
+      <rect width="200" height="140" fill={`url(#bg${seed}${modified})`}/>
+      <rect width="200" height="140" fill={`url(#gl${seed}${modified})`}/>
+      {shapes.map((s,i)=><rect key={i} x={s.x} y={s.y} width={s.w} height={s.h} rx={s.round} fill={`hsla(${s.hue},${s.sat},${s.lit},${s.op*0.3})`} transform={`rotate(${s.r},${s.x+s.w/2},${s.y+s.h/2})`}/>)}
+      <rect x="60" y="35" width="80" height="70" rx="8" fill={modified?`hsla(260,65%,40%,.8)`:`hsla(25,50%,30%,.8)`} stroke={modified?toolColor:"rgba(255,255,255,.1)"} strokeWidth={modified?"1.5":"0.5"} filter={modified?`url(#glow${seed})`:"none"}/>
+      <rect x="72" y="47" width="56" height="40" rx="5" fill={modified?`hsla(275,70%,55%,.6)`:`hsla(30,55%,45%,.5)`}/>
+      <circle cx="100" cy="67" r={modified?14:12} fill={accentCol} opacity={modified?0.9:0.6} filter={modified?`url(#glow${seed})`:"none"}/>
+      {modified&&[0,1,2].map(i=><circle key={i} cx={78+i*22} cy={98} r="2.5" fill={toolColor} opacity="0.8"/>)}
+      <text x="4" y="136" fontSize="5" fill="rgba(255,255,255,.15)" fontFamily="monospace">{modified?"CRÉALY AI · Generated":"CRÉALY AI · Original"}</text>
+    </svg>
+  );
+}
+
+function MockVideoPreview({modified,toolColor}){
+  return(
+    <div style={{position:"relative",width:"100%",height:"100%",background:modified?"#0a051a":"#0d0d0d",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+      <svg viewBox="0 0 200 140" style={{width:"100%",height:"100%",position:"absolute",inset:0}}>
+        <defs>
+          <linearGradient id={`vbg${modified}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={modified?"#1a0a2e":"#111"}/><stop offset="100%" stopColor={modified?"#05020f":"#080808"}/>
+          </linearGradient>
+        </defs>
+        <rect width="200" height="140" fill={`url(#vbg${modified})`}/>
+        {[0,1,2,3,4,5,6,7].map(i=><rect key={i} x={5+i*24} y="118" width={modified?18+Math.sin(i)*4:14} height="14" rx="2" fill={modified?`hsla(${260+i*15},70%,60%,.7)`:`hsla(0,0%,40%,.4)`}/>)}
+        <rect x="30" y="20" width="140" height="88" rx="6" fill={modified?"rgba(139,92,246,.15)":"rgba(255,255,255,.05)"} stroke={modified?toolColor:"rgba(255,255,255,.08)"} strokeWidth="1"/>
+        <ellipse cx="100" cy="52" rx="14" ry="18" fill={modified?"rgba(192,132,252,.6)":"rgba(255,255,255,.2)"}/>
+        <ellipse cx="100" cy="80" rx="22" ry="16" fill={modified?"rgba(139,92,246,.5)":"rgba(255,255,255,.15)"}/>
+        {modified&&<rect x="50" y="94" width="100" height="9" rx="4" fill="rgba(255,255,255,.9)"/>}
+        {modified&&<rect x="70" y="96" width="60" height="5" rx="2" fill="rgba(30,10,60,.8)"/>}
+        <text x="4" y="136" fontSize="5" fill="rgba(255,255,255,.15)" fontFamily="monospace">{modified?"CRÉALY AI · Generated":"CRÉALY AI · Original"}</text>
+      </svg>
+      <div style={{position:"absolute",width:40,height:40,borderRadius:"50%",background:modified?"rgba(139,92,246,.5)":"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",border:`1px solid ${modified?"rgba(139,92,246,.6)":"rgba(255,255,255,.2)"}`}}>
+        <span style={{fontSize:14,color:modified?toolColor:"rgba(255,255,255,.5)",marginLeft:2}}>▶</span>
+      </div>
+    </div>
+  );
+}
+
+// ── EDITOR PAGE ────────────────────────────────────────────────
+function EditorPage({isMobile,tool,setTool,activeTool,isUnlimited,plan,credits,setCredits,file,setFile,fileRef,dragging,setDragging,processing,setProcessing,progress,setProgress,done,setDone,prompt,setPrompt,simulate}){
+  const [sliderX,setSliderX]=useState(50);
+  const [isDraggingSlider,setIsDraggingSlider]=useState(false);
+  const previewRef=useRef();
+  const [previewTab,setPreviewTab]=useState("split");
+  const imgSeed=file?file.name.charCodeAt(0)+file.size:42;
+  const isVideo=tool==="video"||tool==="swap";
+
+  useEffect(()=>{
+    if(!isDraggingSlider)return;
+    const onMove=e=>{
+      const box=previewRef.current?.getBoundingClientRect();
+      if(!box)return;
+      const cx=e.touches?.[0]?.clientX??e.clientX;
+      setSliderX(Math.min(100,Math.max(0,((cx-box.left)/box.width)*100)));
+    };
+    const onUp=()=>setIsDraggingSlider(false);
+    window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+    window.addEventListener("touchmove",onMove); window.addEventListener("touchend",onUp);
+    return()=>{ window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp); window.removeEventListener("touchmove",onMove); window.removeEventListener("touchend",onUp); };
+  },[isDraggingSlider]);
+
+  return(
+    <div style={{animation:"fadeUp .35s ease",maxWidth:960}}>
+      <div style={{marginBottom:24}}>
+        <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>ÉDITEUR IA</div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?24:32,fontWeight:800,color:C.text}}>Nouvelle génération</h2>
+      </div>
+
+      <div style={{marginBottom:18}}>
+        <Label step="01" text="Choisir un outil"/>
+        <div style={{display:"flex",gap:8,flexWrap:isMobile?"wrap":"nowrap"}}>
+          {TOOLS.map(t=>(
+            <button key={t.id} className="ttab" onClick={()=>{setTool(t.id);setDone(false);setFile(null);setProgress(0);setPrompt("");setPreviewTab("split");}} style={{
+              display:"flex",alignItems:"center",gap:8,flex:isMobile?"1 1 auto":undefined,
+              background:tool===t.id?`${t.color}15`:"rgba(255,255,255,.03)",
+              border:`1px solid ${tool===t.id?t.color+"55":C.border}`,
+              borderRadius:10,padding:"10px 16px",cursor:"pointer",
+              fontFamily:"inherit",fontSize:12,fontWeight:tool===t.id?600:400,
+              color:tool===t.id?t.color:C.textSub,justifyContent:"center",
+            }}><span>{t.icon}</span>{t.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{background:`${activeTool.color}08`,border:`1px solid ${activeTool.color}20`,borderRadius:12,padding:"10px 16px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+        <span style={{fontSize:12,color:C.textSub}}>{activeTool.desc}</span>
+        <div style={{display:"flex",gap:20,flexShrink:0}}>
+          <div style={{textAlign:"right"}}><div style={{fontSize:9,color:C.textMuted,letterSpacing:1.5,marginBottom:2,fontWeight:600}}>FORMATS</div><div style={{fontSize:11,color:C.textSub}}>{activeTool.formats}</div></div>
+          <div style={{textAlign:"right"}}><div style={{fontSize:9,color:C.textMuted,letterSpacing:1.5,marginBottom:2,fontWeight:600}}>COÛT</div><div style={{fontSize:12,color:activeTool.color,fontWeight:700}}>{isUnlimited?"∞ Gratuit":`${activeTool.cost} cr. ${activeTool.unit}`}</div></div>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 290px",gap:16}}>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+          {/* Upload */}
+          <div>
+            <Label step="02" text="Importer un fichier"/>
+            <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
+              onDrop={e=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f){setFile(f);setDone(false);}}}
+              onClick={()=>!file&&fileRef.current?.click()}
+              style={{border:`2px dashed ${dragging?activeTool.color:file?"#4ade80":"rgba(255,255,255,.1)"}`,borderRadius:14,minHeight:100,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:file?"default":"pointer",background:dragging?`${activeTool.color}06`:"rgba(255,255,255,.02)",gap:10,position:"relative",overflow:"hidden",transition:"border-color .2s"}}>
+              {file?(
+                <div style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",width:"100%"}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:"rgba(74,222,128,.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#4ade80",flexShrink:0}}>✓</div>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:12,color:"#4ade80",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{file.name}</div>
+                    <div style={{fontSize:10,color:C.textMuted,marginTop:2}}>{(file.size/1024).toFixed(1)} KB · Prêt</div>
+                  </div>
+                  <button onClick={e=>{e.stopPropagation();setFile(null);setDone(false);}} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${C.border}`,borderRadius:7,color:C.textSub,fontFamily:"inherit",fontSize:10,cursor:"pointer",padding:"4px 10px",flexShrink:0}}>✕</button>
+                </div>
+              ):(
+                <><div style={{fontSize:28,color:"rgba(255,255,255,.1)"}}>{activeTool.icon}</div><div style={{fontSize:13,color:C.textSub,fontWeight:500}}>Glisser-déposer ou cliquer</div><div style={{fontSize:10,color:C.textMuted,letterSpacing:1}}>{activeTool.formats}</div></>
+              )}
+              {processing&&(
+                <div style={{position:"absolute",inset:0,background:"rgba(6,6,10,.9)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10}}>
+                  <div style={{width:30,height:30,border:"3px solid rgba(255,255,255,.06)",borderTop:`3px solid ${activeTool.color}`,borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
+                  <div style={{fontSize:11,color:activeTool.color,fontWeight:600}}>{progress}%</div>
+                  <div style={{position:"absolute",bottom:0,left:0,height:2,width:`${progress}%`,background:`linear-gradient(90deg,${activeTool.color}88,${activeTool.color})`,transition:"width .1s"}}/>
+                </div>
+              )}
+            </div>
+            <input ref={fileRef} type="file" style={{display:"none"}} onChange={e=>setFile(e.target.files[0])}/>
+          </div>
+
+          {/* Prompt */}
+          <div>
+            <Label step="03" text="Décrire la modification"/>
+            <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
+              placeholder={tool==="image"?"Ex : remplace la chaise rouge par un fauteuil en velours doré...":tool==="video"?"Ex : montage 30s, transitions rapides, sous-titres blancs...":"Ex : remplace la personne en veste bleue par une silhouette animée..."}
+              style={{width:"100%",background:"rgba(255,255,255,.03)",border:`1px solid ${C.border}`,borderRadius:12,padding:"13px 16px",color:C.text,fontFamily:"inherit",fontSize:12,resize:"none",height:80,lineHeight:1.7,transition:"border-color .2s"}}/>
+          </div>
+
+          {/* ── RESULT PREVIEW ── */}
+          {done&&(
+            <div style={{animation:"fadeUp .4s ease"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
+                <Label step="05" text="Aperçu du résultat"/>
+                <div style={{display:"flex",gap:4}}>
+                  {[{id:"split",label:"Comparaison"},{id:"before",label:"Avant"},{id:"after",label:"Après"}].map(tab=>(
+                    <button key={tab.id} onClick={()=>setPreviewTab(tab.id)} style={{
+                      padding:"4px 12px",borderRadius:8,
+                      border:`1px solid ${previewTab===tab.id?"rgba(139,92,246,.5)":C.border}`,
+                      background:previewTab===tab.id?"rgba(139,92,246,.15)":"transparent",
+                      color:previewTab===tab.id?C.primaryLight:C.textMuted,
+                      fontFamily:"inherit",fontSize:10,fontWeight:previewTab===tab.id?600:400,cursor:"pointer",transition:"all .15s",
+                    }}>{tab.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{...glass,overflow:"hidden",border:"1px solid rgba(139,92,246,.2)",borderRadius:16}}>
+
+                {/* SPLIT */}
+                {previewTab==="split"&&(
+                  <div ref={previewRef} style={{position:"relative",height:isMobile?190:260,cursor:"col-resize",userSelect:"none"}}
+                    onMouseDown={()=>setIsDraggingSlider(true)} onTouchStart={()=>setIsDraggingSlider(true)}>
+                    {/* After layer */}
+                    <div style={{position:"absolute",inset:0}}>
+                      {isVideo?<MockVideoPreview modified toolColor={activeTool.color}/>:<MockImage seed={imgSeed} modified toolColor={activeTool.color} toolId={tool}/>}
+                    </div>
+                    {/* Before layer clipped */}
+                    <div style={{position:"absolute",inset:0,clipPath:`inset(0 ${100-sliderX}% 0 0)`}}>
+                      {isVideo?<MockVideoPreview modified={false} toolColor={activeTool.color}/>:<MockImage seed={imgSeed} modified={false} toolColor={activeTool.color} toolId={tool}/>}
+                    </div>
+                    {/* Divider */}
+                    <div style={{position:"absolute",top:0,bottom:0,left:`${sliderX}%`,width:2,background:"rgba(255,255,255,.8)",transform:"translateX(-50%)",pointerEvents:"none"}}>
+                      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:34,height:34,borderRadius:"50%",background:"#fff",boxShadow:"0 2px 16px rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#111",fontWeight:700,cursor:"col-resize"}}>⇔</div>
+                    </div>
+                    <div style={{position:"absolute",top:10,left:10,background:"rgba(0,0,0,.65)",backdropFilter:"blur(8px)",borderRadius:6,padding:"3px 10px",fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:600,letterSpacing:1,pointerEvents:"none"}}>AVANT</div>
+                    <div style={{position:"absolute",top:10,right:10,background:`${activeTool.color}33`,backdropFilter:"blur(8px)",borderRadius:6,padding:"3px 10px",fontSize:10,color:activeTool.color,fontWeight:600,letterSpacing:1,border:`1px solid ${activeTool.color}55`,pointerEvents:"none"}}>APRÈS</div>
+                  </div>
+                )}
+
+                {previewTab==="before"&&(
+                  <div style={{height:isMobile?190:260}}>
+                    {isVideo?<MockVideoPreview modified={false} toolColor={activeTool.color}/>:<MockImage seed={imgSeed} modified={false} toolColor={activeTool.color} toolId={tool}/>}
+                  </div>
+                )}
+
+                {previewTab==="after"&&(
+                  <div style={{height:isMobile?190:260}}>
+                    {isVideo?<MockVideoPreview modified toolColor={activeTool.color}/>:<MockImage seed={imgSeed} modified toolColor={activeTool.color} toolId={tool}/>}
+                  </div>
+                )}
+
+                {/* Bottom bar */}
+                <div style={{padding:"13px 18px",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <div style={{width:6,height:6,borderRadius:"50%",background:"#4ade80",boxShadow:"0 0 6px #4ade80"}}/>
+                      <span style={{fontSize:11,color:"#4ade80",fontWeight:600}}>Génération réussie</span>
+                    </div>
+                    <span style={{fontSize:10,color:C.textMuted}}>· {activeTool.cost} crédits débités</span>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>{setDone(false);setFile(null);setPrompt("");setPreviewTab("split");}} style={{background:"rgba(255,255,255,.04)",border:`1px solid ${C.border}`,color:C.textSub,borderRadius:9,padding:"7px 14px",fontFamily:"inherit",fontSize:11,fontWeight:500,cursor:"pointer"}}>↺ Recommencer</button>
+                    <button style={{background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",border:"none",borderRadius:9,padding:"7px 18px",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 16px rgba(139,92,246,.35)"}}>⬇ Télécharger</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Metadata chips */}
+              <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                {[
+                  {label:"Modèle", val:tool==="image"?"DINO + SD XL":tool==="video"?"FFmpeg + Whisper":"InsightFace + SAM2"},
+                  {label:"Durée",  val:`${(Math.random()*8+4).toFixed(1)}s`},
+                  {label:"Format", val:tool==="image"?"PNG 1024×768":"MP4 1080p"},
+                  {label:"Crédits",val:`${activeTool.cost} cr.`},
+                ].map((c,i)=>(
+                  <div key={i} style={{background:"rgba(255,255,255,.03)",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px",display:"flex",gap:6,alignItems:"center"}}>
+                    <span style={{fontSize:9,color:C.textMuted,fontWeight:600,letterSpacing:1}}>{c.label.toUpperCase()}</span>
+                    <span style={{fontSize:10,color:C.text,fontWeight:500}}>{c.val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right panel */}
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div>
+            <Label step="04" text="Paramètres"/>
+            <div style={{...glass,overflow:"hidden"}}>
+              {(tool==="image"?[{name:"YOLOv8",desc:"Rapide · généraliste"},{name:"Grounding DINO",desc:"Précis · recommandé"},{name:"SAM 2",desc:"Ultra précis · lent"}]:
+                tool==="video"?[{name:"9:16 TikTok",desc:"Portrait vertical"},{name:"1:1 Carré",desc:"Instagram, LinkedIn"},{name:"16:9 YouTube",desc:"Paysage horizontal"}]:
+                [{name:"Rapide",desc:"1080p · accéléré"},{name:"Équilibré",desc:"1080p · recommandé"},{name:"Ultra",desc:"4K · lissage max"}]
+              ).map((m,i,arr)=>(
+                <label key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none",cursor:"pointer"}}>
+                  <input type="radio" name={tool} defaultChecked={i===1||(tool==="video"&&i===0)}/>
+                  <div>
+                    <div style={{fontSize:12,color:C.text,fontWeight:500}}>{m.name}</div>
+                    <div style={{fontSize:10,color:C.textMuted,marginTop:1}}>{m.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{...glass,overflow:"hidden"}}>
+            {[
+              {label:"Plan actif",      val:plan?.name,                                            color:plan?.color},
+              {label:"Coût génération", val:isUnlimited?"Gratuit ∞":`${activeTool.cost} cr.`,     color:activeTool.color},
+              {label:"Solde après",     val:isUnlimited?"∞":`${Math.max(0,credits-activeTool.cost)} cr.`, color:C.textSub},
+            ].map((row,i,arr)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 16px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+                <span style={{fontSize:11,color:C.textMuted}}>{row.label}</span>
+                <span style={{fontSize:12,color:row.color,fontWeight:600}}>{row.val}</span>
+              </div>
+            ))}
+          </div>
+
+          <button className="gbtn" onClick={simulate} disabled={processing||done} style={{
+            background:processing?"rgba(255,255,255,.04)":done?"rgba(74,222,128,.08)":"linear-gradient(135deg,#7c3aed,#a855f7,#c084fc)",
+            backgroundSize:"200% 200%",animation:!processing&&!done?"gradPan 3s ease infinite":"none",
+            color:processing?C.textMuted:done?"#4ade80":"#fff",
+            border:done?"1px solid rgba(74,222,128,.25)":"none",
+            borderRadius:12,padding:"15px",fontFamily:"inherit",fontSize:13,fontWeight:700,letterSpacing:.5,
+            cursor:processing||done?"default":"pointer",width:"100%",
+          }}>
+            {processing?`Traitement... ${progress}%`:done?"✓ Résultat disponible ci-dessous":`Générer ${activeTool.icon}`}
+          </button>
+
+          {done&&(
+            <button onClick={()=>{setDone(false);setFile(null);setPrompt("");setPreviewTab("split");}} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textSub,borderRadius:12,padding:"11px",fontFamily:"inherit",fontSize:12,fontWeight:500,cursor:"pointer"}}>↺ Nouvelle génération</button>
+          )}
+          {!file&&!prompt&&!done&&<p style={{fontSize:10,color:C.textMuted,textAlign:"center"}}>Importez un fichier ou rédigez un prompt</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BILLING PAGE ──────────────────────────────────────────────
+function BillingPage({plan,userPlan,setUserPlan,credits,setCredits,isUnlimited,isMobile}) {
+  const [billing,setBilling]       = useState("monthly");
+  const [payMethod,setPayMethod]   = useState("card");
+  const [selectedPlan,setSelectedPlan] = useState(userPlan);
+  const [checkoutStep,setCheckoutStep] = useState(null);
+  const [creditCheckout,setCreditCheckout] = useState(null); // credit pack checkout
+  const [cancelFlow,setCancelFlow]     = useState(false);
+  const [cancelStep,setCancelStep]     = useState(1);
+  const [cancelReason,setCancelReason] = useState("");
+  const [cardFields,setCardFields]     = useState({number:"",expiry:"",cvc:"",name:""});
+  const [paying,setPaying]             = useState(false);
+  const [toast,setToast]               = useState(null);
+
+  const PLANS_EXT = [
+    {id:"standard",name:"Starter",monthlyPrice:9,  credits:"80", unlimited:false,color:"#6ee7b7",features:["Images 512px","Vidéos 30s","File standard","Email support"]},
+    {id:"medium",  name:"Pro",    monthlyPrice:19, credits:"300",unlimited:false,color:"#a78bfa",features:["Images 1024px","Vidéos 2 min","File prioritaire","Chat support"]},
+    {id:"premium", name:"Ultime", monthlyPrice:49, credits:"∞",  unlimited:true, color:"#c084fc",features:["Images 4K","Vidéos 10 min","File VIP","Support 24/7"]},
+  ];
+
+  const CREDIT_PACKS = [
+    {credits:30,   price:"4,99",  priceNum:4.99,  per:"0,17€/cr."},
+    {credits:120,  price:"12,99", priceNum:12.99, per:"0,11€/cr."},
+    {credits:500,  price:"39,99", priceNum:39.99, per:"0,08€/cr.", best:true},
+    {credits:1000, price:"69,99", priceNum:69.99, per:"0,07€/cr."},
+  ];
+
+  const CANCEL_REASONS = ["Trop cher","Je n'utilise pas assez la plateforme","Je préfère un autre service","Fonctionnalités manquantes","Problème technique","Autre raison"];
+
+  const disc = 0.20;
+  const getPrice   = p => billing==="annual" ? (p.monthlyPrice*(1-disc)).toFixed(0) : p.monthlyPrice;
+  const getAnnual  = p => (p.monthlyPrice*12*(1-disc)).toFixed(0);
+  const getSaving  = p => (p.monthlyPrice*12*disc).toFixed(0);
+
+  function showToast(msg,color="#4ade80"){
+    setToast({msg,color});
+    setTimeout(()=>setToast(null),3500);
+  }
+
+  function handlePay(){
+    setPaying(true);
+    setTimeout(()=>{
+      setPaying(false);
+      if(creditCheckout!==null){
+        // credit pack payment
+        const pack=CREDIT_PACKS[creditCheckout];
+        if(!isUnlimited) setCredits(c=>c+pack.credits);
+        setCreditCheckout(null);
+        showToast(`+${pack.credits} crédits ajoutés avec succès !`);
+        return;
+      }
+      const p=PLANS_EXT.find(x=>x.id===checkoutStep);
+      setUserPlan(checkoutStep);
+      if(!p.unlimited)setCredits(parseInt(p.credits));
+      setCheckoutStep(null);
+      showToast(`Plan ${p.name} activé avec succès !`);
+    },2200);
+  }
+
+  function handleCancel(){
+    setUserPlan(null);
+    setCancelFlow(false);
+    setCancelStep(1);
+    setCancelReason("");
+    showToast("Abonnement résilié. Vos crédits restent actifs jusqu'à la fin du mois.","#f472b6");
+  }
+
+  const inp={background:"rgba(255,255,255,.04)",border:`1px solid ${C.border}`,borderRadius:10,padding:"11px 14px",color:C.text,fontFamily:"inherit",fontSize:12,width:"100%",transition:"border-color .2s"};
+
+  // ── CANCELLATION FLOW ──────────────────────────────────────
+  if(cancelFlow){
+    return(
+      <div style={{animation:"fadeUp .3s ease",maxWidth:520,margin:"0 auto"}}>
+        <button onClick={()=>{setCancelFlow(false);setCancelStep(1);}} style={{background:"none",border:"none",color:C.textSub,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginBottom:24,display:"flex",alignItems:"center",gap:6}}>← Retour</button>
+
+        {cancelStep===1 && (
+          <>
+            <div style={{textAlign:"center",marginBottom:28}}>
+              <div style={{width:64,height:64,borderRadius:"50%",background:"rgba(244,114,182,.1)",border:"1px solid rgba(244,114,182,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>⚠</div>
+              <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:800,color:C.text,marginBottom:8}}>Résilier votre abonnement ?</h2>
+              <p style={{fontSize:13,color:C.textSub,lineHeight:1.6}}>Vous perdrez l'accès à toutes les fonctionnalités premium à la fin de votre période de facturation.</p>
+            </div>
+            <div style={{...glass,padding:20,marginBottom:20}}>
+              <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:14,fontWeight:600}}>VOUS ALLEZ PERDRE</div>
+              {(plan?.unlimited?["Crédits illimités","Images 4K","Vidéos jusqu'à 10 min","File VIP","Support dédié 24/7"]:["Vos crédits restants","Accès prioritaire","Fonctionnalités avancées"]).map((f,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <span style={{color:"#f472b6",fontSize:12}}>✕</span>
+                  <span style={{fontSize:12,color:C.textSub}}>{f}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setCancelFlow(false)} style={{flex:1,padding:"13px",background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer"}}>Garder mon abonnement</button>
+              <button onClick={()=>setCancelStep(2)} style={{flex:1,padding:"13px",background:"rgba(244,114,182,.08)",color:"#f472b6",border:"1px solid rgba(244,114,182,.25)",borderRadius:12,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer"}}>Continuer la résiliation</button>
+            </div>
+          </>
+        )}
+
+        {cancelStep===2 && (
+          <>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:6}}>Pourquoi nous quittez-vous ?</h2>
+            <p style={{fontSize:12,color:C.textSub,marginBottom:24}}>Votre avis nous aide à améliorer CRÉALY.</p>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:24}}>
+              {CANCEL_REASONS.map((r,i)=>(
+                <label key={i} onClick={()=>setCancelReason(r)} style={{
+                  display:"flex",alignItems:"center",gap:12,padding:"14px 16px",
+                  background:cancelReason===r?"rgba(244,114,182,.08)":"rgba(255,255,255,.02)",
+                  border:`1px solid ${cancelReason===r?"rgba(244,114,182,.35)":C.border}`,
+                  borderRadius:12,cursor:"pointer",transition:"all .15s",
+                }}>
+                  <div style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${cancelReason===r?"#f472b6":C.textMuted}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {cancelReason===r&&<div style={{width:8,height:8,borderRadius:"50%",background:"#f472b6"}}/>}
+                  </div>
+                  <span style={{fontSize:13,color:cancelReason===r?C.text:C.textSub}}>{r}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setCancelStep(1)} style={{padding:"12px 20px",background:"rgba(255,255,255,.04)",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,fontFamily:"inherit",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Retour</button>
+              <button onClick={()=>{if(cancelReason)setCancelStep(3);}} style={{flex:1,padding:"12px",background:cancelReason?"rgba(244,114,182,.1)":"rgba(255,255,255,.03)",color:cancelReason?"#f472b6":C.textMuted,border:`1px solid ${cancelReason?"rgba(244,114,182,.3)":C.border}`,borderRadius:12,fontFamily:"inherit",fontSize:12,fontWeight:600,cursor:cancelReason?"pointer":"default"}}>Continuer →</button>
+            </div>
+          </>
+        )}
+
+        {cancelStep===3 && (
+          <>
+            <div style={{...glass,padding:24,marginBottom:20}}>
+              <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:16,fontWeight:600}}>RÉSUMÉ DE RÉSILIATION</div>
+              {[
+                {label:"Plan résilié",   val:plan?.name,                      color:plan?.color},
+                {label:"Motif",          val:cancelReason,                    color:C.textSub},
+                {label:"Fin d'accès",    val:"30 Avril 2026",                 color:"#f472b6"},
+                {label:"Remboursement",  val:"Aucun (fin de période)",        color:C.textMuted},
+              ].map((row,i,arr)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"11px 0",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+                  <span style={{fontSize:12,color:C.textMuted}}>{row.label}</span>
+                  <span style={{fontSize:12,color:row.color,fontWeight:600,maxWidth:200,textAlign:"right"}}>{row.val}</span>
+                </div>
+              ))}
+            </div>
+            <p style={{fontSize:12,color:C.textSub,marginBottom:20,lineHeight:1.6,textAlign:"center"}}>En confirmant, votre abonnement sera résilié à la fin de la période en cours. Vos données restent accessibles.</p>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setCancelStep(2)} style={{padding:"12px 20px",background:"rgba(255,255,255,.04)",color:C.textSub,border:`1px solid ${C.border}`,borderRadius:12,fontFamily:"inherit",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Retour</button>
+              <button onClick={handleCancel} style={{flex:1,padding:"12px",background:"rgba(244,114,182,.1)",color:"#f472b6",border:"1px solid rgba(244,114,182,.3)",borderRadius:12,fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer la résiliation</button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── CREDIT PACK CHECKOUT ───────────────────────────────────
+  if(creditCheckout!==null){
+    const pack=CREDIT_PACKS[creditCheckout];
+    return(
+      <div style={{animation:"fadeUp .3s ease",maxWidth:isMobile?"100%":520,margin:"0 auto"}}>
+        <button onClick={()=>setCreditCheckout(null)} style={{background:"none",border:"none",color:C.textSub,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginBottom:24,display:"flex",alignItems:"center",gap:6}}>← Retour aux crédits</button>
+        <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>ACHAT DE CRÉDITS</div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?22:26,fontWeight:800,color:C.text,marginBottom:4}}>Finaliser l'achat</h2>
+        <p style={{fontSize:12,color:C.textSub,marginBottom:24}}>Pack de <span style={{color:C.primary,fontWeight:600}}>{pack.credits} crédits</span> · paiement unique</p>
+
+        {/* Summary */}
+        <div style={{background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.25)",borderRadius:14,padding:"16px 20px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:10,color:C.textMuted,letterSpacing:1.5,marginBottom:4,fontWeight:600}}>RÉCAPITULATIF</div>
+            <div style={{fontSize:13,color:C.text,fontWeight:600}}>{pack.credits} crédits · Paiement unique</div>
+            <div style={{fontSize:11,color:C.textSub,marginTop:2}}>Disponibles immédiatement · {pack.per}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,color:C.primary,fontWeight:800,lineHeight:1}}>{pack.price}€</div>
+            <div style={{fontSize:10,color:C.textMuted}}>TTC</div>
+          </div>
+        </div>
+
+        <CheckoutForm payMethod={payMethod} setPayMethod={setPayMethod} cardFields={cardFields} setCardFields={setCardFields} paying={paying} onPay={handlePay}
+          total={pack.price} label={`Payer ${pack.price}€`} inp={inp}/>
+      </div>
+    );
+  }
+
+  // ── SUBSCRIPTION CHECKOUT ───────────────────────────────────
+  if(checkoutStep){
+    const p=PLANS_EXT.find(x=>x.id===checkoutStep);
+    const price=getPrice(p);
+    const total=billing==="annual"?getAnnual(p):price;
+    return(
+      <div style={{animation:"fadeUp .3s ease",maxWidth:isMobile?"100%":540,margin:"0 auto"}}>
+        <button onClick={()=>setCheckoutStep(null)} style={{background:"none",border:"none",color:C.textSub,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginBottom:24,display:"flex",alignItems:"center",gap:6}}>← Retour aux plans</button>
+        <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>PAIEMENT SÉCURISÉ</div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?22:28,fontWeight:800,color:C.text,marginBottom:4}}>Finaliser l'abonnement</h2>
+        <p style={{fontSize:12,color:C.textSub,marginBottom:24}}>Plan <span style={{color:p.color,fontWeight:600}}>{p.name}</span> · {billing==="annual"?`${price}€/mois · facturé ${total}€/an`:`${price}€/mois`}</p>
+
+        <div style={{background:`${p.color}08`,border:`1px solid ${p.color}25`,borderRadius:14,padding:"16px 20px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:10,color:C.textMuted,letterSpacing:1.5,marginBottom:4,fontWeight:600}}>RÉCAPITULATIF</div>
+            <div style={{fontSize:13,color:C.text,fontWeight:600}}>Plan {p.name} · {billing==="annual"?"Annuel":"Mensuel"}</div>
+            <div style={{fontSize:11,color:C.textSub,marginTop:2}}>{p.unlimited?"Crédits illimités":p.credits+" crédits/mois"}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,color:p.color,fontWeight:800,lineHeight:1}}>{total}€</div>
+            <div style={{fontSize:10,color:C.textMuted}}>{billing==="annual"?"/ an":"/ mois"}</div>
+            {billing==="annual"&&<div style={{fontSize:10,color:"#4ade80",marginTop:2}}>−{getSaving(p)}€ économisés</div>}
+          </div>
+        </div>
+
+        <CheckoutForm payMethod={payMethod} setPayMethod={setPayMethod} cardFields={cardFields} setCardFields={setCardFields} paying={paying} onPay={handlePay}
+          total={total} label={`Payer ${total}€`} inp={inp} showSub/>
+      </div>
+    );
+  }
+
+  // ── MAIN BILLING VIEW ──────────────────────────────────────
+  return(
+    <div style={{animation:"fadeUp .35s ease",maxWidth:960}}>
+      {/* Toast */}
+      {toast&&(
+        <div style={{position:"fixed",bottom:isMobile?90:28,right:isMobile?16:28,left:isMobile?16:"auto",zIndex:999,
+          background:`${toast.color}15`,border:`1px solid ${toast.color}44`,borderRadius:14,padding:"14px 20px",
+          display:"flex",alignItems:"center",gap:12,backdropFilter:"blur(20px)",animation:"fadeUp .3s ease"}}>
+          <span style={{fontSize:16}}>{toast.color==="#4ade80"?"✓":"◈"}</span>
+          <span style={{fontSize:13,color:toast.color,fontWeight:600}}>{toast.msg}</span>
+        </div>
+      )}
+
+      <div style={{marginBottom:24}}>
+        <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>ABONNEMENT</div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?24:32,fontWeight:800,color:C.text}}>Choisir un plan</h2>
+        <p style={{fontSize:12,color:C.textSub,marginTop:6}}>
+          Plan actuel : <span style={{color:plan?.color,fontWeight:600}}>{plan?.name??"Aucun"}</span>
+          {" · "}{isUnlimited?"Crédits illimités":`${credits} crédits restants`}
+        </p>
+      </div>
+
+      {/* Billing toggle */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24,flexWrap:"wrap"}}>
+        {[
+          {id:"monthly",label:"Mensuel",badge:null},
+          {id:"annual", label:"Annuel", badge:"−20%"},
+        ].map(b=>(
+          <button key={b.id} onClick={()=>setBilling(b.id)} style={{
+            display:"flex",alignItems:"center",gap:8,
+            background:billing===b.id?"rgba(139,92,246,.15)":"transparent",
+            border:`1px solid ${billing===b.id?"rgba(139,92,246,.4)":C.border}`,
+            color:billing===b.id?C.primaryLight:C.textSub,
+            borderRadius:10,padding:"8px 20px",cursor:"pointer",
+            fontFamily:"inherit",fontSize:12,fontWeight:billing===b.id?600:400,transition:"all .15s",
+          }}>
+            {b.label}
+            {b.badge&&<span style={{background:"linear-gradient(135deg,#7c3aed,#c084fc)",color:"#fff",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:99}}>{b.badge}</span>}
+          </button>
+        ))}
+        {billing==="annual"&&<span style={{fontSize:11,color:"#4ade80",fontWeight:500,animation:"fadeUp .2s ease"}}>✓ 2 mois offerts</span>}
+      </div>
+
+      {/* Plan cards */}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:14,marginBottom:24}}>
+        {PLANS_EXT.map(p=>{
+          const price=getPrice(p);
+          const isActive=userPlan===p.id;
+          const isSel=selectedPlan===p.id;
+          return(
+            <div key={p.id} className="pcrd" onClick={()=>setSelectedPlan(p.id)} style={{
+              background:isSel?"rgba(139,92,246,.08)":C.surface,
+              backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",
+              border:`1px solid ${isSel?p.color+"55":C.border}`,
+              borderRadius:18,padding:isMobile?"20px":24,position:"relative",
+              boxShadow:isSel?"0 0 40px rgba(139,92,246,.15)":"none",
+            }}>
+              {p.id==="premium"&&<div style={{position:"absolute",top:16,right:16,background:"linear-gradient(135deg,#7c3aed,#c084fc)",color:"#fff",fontSize:8,letterSpacing:2,fontWeight:700,padding:"3px 10px",borderRadius:99}}>BEST VALUE</div>}
+              {isActive&&<div style={{position:"absolute",top:16,left:16,background:"rgba(74,222,128,.12)",border:"1px solid rgba(74,222,128,.3)",color:"#4ade80",fontSize:9,fontWeight:600,padding:"3px 10px",borderRadius:99}}>ACTIF</div>}
+              <div style={{marginTop:isActive?24:0,marginBottom:16}}>
+                <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:6,fontWeight:600}}>{p.name.toUpperCase()}</div>
+                <div style={{display:"flex",alignItems:"baseline",gap:4}}>
+                  <span style={{fontFamily:"'Syne',sans-serif",fontSize:42,color:p.color,lineHeight:1,fontWeight:800}}>{price}€</span>
+                  <span style={{fontSize:11,color:C.textMuted}}>/mois</span>
+                </div>
+                {billing==="annual"&&<div style={{fontSize:10,color:C.textSub,marginTop:4}}>Facturé <span style={{color:C.text,fontWeight:600}}>{getAnnual(p)}€/an</span><span style={{color:"#4ade80",marginLeft:6}}>−{getSaving(p)}€</span></div>}
+              </div>
+              <div style={{background:`${p.color}10`,border:`1px solid ${p.color}25`,borderRadius:12,padding:"12px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:9,color:C.textMuted,letterSpacing:1.5,marginBottom:3,fontWeight:600}}>CRÉDITS / MOIS</div>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:24,color:p.color,fontWeight:800}}>{p.unlimited?"ILLIMITÉS":p.credits}</div>
+                </div>
+                {p.unlimited&&<span style={{fontSize:26,color:p.color,opacity:.7}}>∞</span>}
+              </div>
+              <div style={{marginBottom:18}}>
+                {p.features.map((f,i)=>(
+                  <div key={i} style={{display:"flex",gap:10,marginBottom:8}}>
+                    <span style={{color:p.color,fontSize:11,flexShrink:0}}>✓</span>
+                    <span style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={e=>{e.stopPropagation();if(!isActive)setCheckoutStep(p.id);}} style={{
+                width:"100%",
+                background:isActive?"rgba(255,255,255,.04)":`linear-gradient(135deg,${p.color}bb,${p.color})`,
+                color:isActive?C.textSub:"#fff",
+                border:`1px solid ${isActive?C.border:"transparent"}`,
+                borderRadius:11,padding:"13px",
+                fontFamily:"inherit",fontSize:12,fontWeight:600,
+                cursor:isActive?"default":"pointer",transition:"all .15s",
+              }}>
+                {isActive?"✓ Plan actuel":"Choisir ce plan →"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Payment methods */}
+      <div style={{...glass,padding:"16px 20px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:10,color:C.textMuted,letterSpacing:1.5,marginBottom:8,fontWeight:600}}>MOYENS DE PAIEMENT ACCEPTÉS</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><VisaIcon/><McIcon/><AmexIcon/><div style={{width:1,height:22,background:C.border}}/><PayPalLogo size={15}/></div>
+        </div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+          {["🔒 SSL 256-bit","✓ PCI DSS","↩ Remboursement 7j"].map((b,i)=>(
+            <span key={i} style={{fontSize:10,color:C.textMuted}}>{b}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Credit packs */}
+      <div style={{...glass,padding:22,marginBottom:userPlan?20:0}}>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:4,fontWeight:600}}>CRÉDITS SUPPLÉMENTAIRES</div>
+          <p style={{fontSize:12,color:C.textSub}}>Achetez des crédits à l'unité, disponibles instantanément après paiement.</p>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:10}}>
+          {CREDIT_PACKS.map((b,i)=>(
+            <div key={i} className="cpk" onClick={()=>setCreditCheckout(i)} style={{
+              background:"rgba(255,255,255,.02)",
+              border:`1px solid ${b.best?"rgba(139,92,246,.35)":C.border}`,
+              borderRadius:13,padding:"16px 12px",position:"relative",textAlign:"center",
+            }}>
+              {b.best&&<div style={{position:"absolute",top:-1,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",fontSize:8,letterSpacing:1,fontWeight:700,padding:"3px 10px",borderRadius:"0 0 8px 8px",whiteSpace:"nowrap"}}>POPULAIRE</div>}
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,color:C.primary,fontWeight:800,lineHeight:1,marginTop:b.best?10:0}}>{b.credits}</div>
+              <div style={{fontSize:9,color:C.textMuted,letterSpacing:1.5,marginBottom:10,fontWeight:600}}>CRÉDITS</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:2}}>{b.price}€</div>
+              <div style={{fontSize:10,color:C.textMuted,marginBottom:10}}>{b.per}</div>
+              <div style={{fontSize:10,color:C.primary,fontWeight:600,letterSpacing:.5}}>Acheter →</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── CANCEL SUBSCRIPTION SECTION ── */}
+      {userPlan && (
+        <div style={{marginTop:20,...glass,padding:22,border:"1px solid rgba(244,114,182,.12)"}}>
+          <div style={{display:"flex",alignItems:isMobile?"flex-start":"center",justifyContent:"space-between",flexDirection:isMobile?"column":"row",gap:14}}>
+            <div>
+              <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:4}}>Résilier l'abonnement</div>
+              <p style={{fontSize:11,color:C.textSub,lineHeight:1.5}}>
+                Votre accès reste actif jusqu'à la fin de la période en cours.{" "}
+                <span style={{color:C.textMuted}}>Prochain renouvellement : 30 Avril 2026.</span>
+              </p>
+            </div>
+            <button onClick={()=>{setCancelFlow(true);setCancelStep(1);}} style={{
+              background:"rgba(244,114,182,.06)",
+              color:"#f472b6",
+              border:"1px solid rgba(244,114,182,.25)",
+              borderRadius:10,padding:"10px 22px",
+              fontFamily:"inherit",fontSize:12,fontWeight:600,
+              cursor:"pointer",transition:"all .15s",whiteSpace:"nowrap",flexShrink:0,
+            }}>
+              Résilier →
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── APPLE PAY ICON ────────────────────────────────────────────
+function ApplePayIcon(){
+  return(
+    <svg width="52" height="22" viewBox="0 0 52 22" fill="none">
+      <rect width="52" height="22" rx="4" fill="#000"/>
+      <text x="6" y="15" fontFamily="'Helvetica Neue',Arial" fontWeight="500" fontSize="9" fill="white"> Pay</text>
+      <path d="M8 6.5C8.4 6 8.9 5.7 9.5 5.7c.1.6-.2 1.2-.5 1.6-.4.4-.9.7-1.4.7-.1-.6.1-1.2.4-1.5z" fill="white"/>
+    </svg>
+  );
+}
+
+// ── SHARED CHECKOUT FORM ──────────────────────────────────────
+function CheckoutForm({payMethod,setPayMethod,cardFields,setCardFields,paying,onPay,total,label,inp,showSub}){
+  const METHODS = [
+    {id:"card",    label:"Carte",    icon:<div style={{display:"flex",gap:3}}><VisaIcon/><McIcon/><AmexIcon/></div>},
+    {id:"paypal",  label:"PayPal",   icon:<PayPalLogo size={13}/>},
+    {id:"applepay",label:"Apple Pay",icon:<ApplePayIcon/>},
+  ];
+  return(
+    <>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:10,color:C.textMuted,letterSpacing:1.5,marginBottom:10,fontWeight:600}}>MODE DE PAIEMENT</div>
+        <div style={{display:"flex",gap:8}}>
+          {METHODS.map(m=>(
+            <button key={m.id} onClick={()=>setPayMethod(m.id)} style={{
+              flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"12px 8px",
+              background:payMethod===m.id?"rgba(139,92,246,.1)":"rgba(255,255,255,.03)",
+              border:`1px solid ${payMethod===m.id?"rgba(139,92,246,.45)":C.border}`,
+              borderRadius:12,cursor:"pointer",transition:"all .15s",
+            }}>
+              {m.icon}
+              <span style={{fontSize:10,color:payMethod===m.id?C.primaryLight:C.textSub,fontWeight:payMethod===m.id?600:400}}>{m.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {payMethod==="card"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+          <div>
+            <div style={{fontSize:10,color:C.textMuted,letterSpacing:1,marginBottom:6,fontWeight:500}}>Nom sur la carte</div>
+            <input style={inp} placeholder="Jean Dupont" value={cardFields.name} onChange={e=>setCardFields(f=>({...f,name:e.target.value}))}/>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:C.textMuted,letterSpacing:1,marginBottom:6,fontWeight:500}}>Numéro de carte</div>
+            <div style={{position:"relative"}}>
+              <input style={{...inp,paddingRight:100}} placeholder="1234 5678 9012 3456"
+                value={cardFields.number}
+                onChange={e=>setCardFields(f=>({...f,number:e.target.value.replace(/\D/g,"").slice(0,16).replace(/(.{4})/g,"$1 ").trim()}))}/>
+              <div style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",display:"flex",gap:4}}><VisaIcon/><McIcon/></div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <div style={{fontSize:10,color:C.textMuted,letterSpacing:1,marginBottom:6,fontWeight:500}}>Expiration</div>
+              <input style={inp} placeholder="MM/AA" value={cardFields.expiry}
+                onChange={e=>{const d=e.target.value.replace(/\D/g,"").slice(0,4);setCardFields(f=>({...f,expiry:d.length>2?d.slice(0,2)+"/"+d.slice(2):d}));}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:C.textMuted,letterSpacing:1,marginBottom:6,fontWeight:500}}>CVC</div>
+              <input style={inp} placeholder="•••" maxLength={4} value={cardFields.cvc}
+                onChange={e=>setCardFields(f=>({...f,cvc:e.target.value.replace(/\D/g,"").slice(0,4)}))}/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {payMethod==="paypal"&&(
+        <div style={{background:"rgba(0,156,222,.06)",border:"1px solid rgba(0,156,222,.2)",borderRadius:14,padding:"20px",marginBottom:20,textAlign:"center"}}>
+          <PayPalLogo size={22}/>
+          <p style={{fontSize:12,color:C.textSub,marginTop:10}}>Vous serez redirigé vers PayPal pour finaliser le paiement en toute sécurité.</p>
+        </div>
+      )}
+
+      {payMethod==="applepay"&&(
+        <div style={{background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,padding:"20px",marginBottom:20,textAlign:"center"}}>
+          <div style={{fontSize:28,marginBottom:8}}>🍎</div>
+          <p style={{fontSize:12,color:C.textSub}}>Authentifiez-vous avec Face ID ou Touch ID pour confirmer le paiement.</p>
+          <p style={{fontSize:10,color:C.textMuted,marginTop:6}}>Apple Pay utilise votre carte enregistrée dans Wallet.</p>
+        </div>
+      )}
+
+      {/* Security row */}
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18,padding:"11px 16px",background:"rgba(255,255,255,.02)",borderRadius:10,border:`1px solid ${C.border}`,flexWrap:"wrap"}}>
+        {["🔒 SSL 256-bit","✓ PCI DSS","↩ Remboursement 7j"].map((b,i)=>(
+          <span key={i} style={{fontSize:10,color:C.textMuted}}>{b}</span>
+        ))}
+      </div>
+
+      <button onClick={onPay} disabled={paying} style={{
+        width:"100%",padding:"15px",
+        background:paying?"rgba(139,92,246,.3)":payMethod==="applepay"?"#000":"linear-gradient(135deg,#7c3aed,#a855f7,#c084fc)",
+        backgroundSize:"200% 200%",
+        animation:!paying&&payMethod!=="applepay"?"gradPan 3s ease infinite":"none",
+        color:"#fff",border:payMethod==="applepay"?"1px solid rgba(255,255,255,.15)":"none",
+        borderRadius:13,fontFamily:"inherit",fontSize:14,fontWeight:700,
+        cursor:paying?"not-allowed":"pointer",
+        boxShadow:payMethod==="applepay"?"none":"0 8px 32px rgba(139,92,246,.35)",
+      }}>
+        {paying?(
+          <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+            <span style={{width:14,height:14,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid #fff",borderRadius:"50%",display:"inline-block",animation:"spin .7s linear infinite"}}/>
+            Traitement...
+          </span>
+        ):payMethod==="paypal"?(
+          <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>Continuer avec <PayPalLogo size={13}/></span>
+        ):payMethod==="applepay"?(
+          <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ApplePayIcon/></span>
+        ):`${label} →`}
+      </button>
+      {showSub&&<p style={{fontSize:10,color:C.textMuted,textAlign:"center",marginTop:10}}>Annulation possible à tout moment · Sans engagement</p>}
+    </>
+  );
+}
+
+// ── ACCOUNT PAGE ─────────────────────────────────────────────
+function AccountPage({user,setUser,plan,credits,isUnlimited,isMobile,onLogout}){
+  const [section,setSection] = useState("profile");
+  const [profile,setProfile] = useState({ name:user?.name||"", email:user?.email||"", avatar:(user?.name||"A")[0].toUpperCase() });
+  const [pwFields,setPwFields] = useState({current:"",next:"",confirm:""});
+  const [notifs,setNotifs]   = useState({ email_generation:true, email_billing:true, email_promo:false, push_done:true });
+  const [saved,setSaved]     = useState(false);
+  const [delConfirm,setDelConfirm] = useState(false);
+
+  function saveProfile(){ setUser(u=>({...u,name:profile.name,email:profile.email})); setSaved(true); setTimeout(()=>setSaved(false),2200); }
+
+  const inp = {
+    width:"100%",background:"rgba(255,255,255,.04)",border:`1px solid ${C.border}`,
+    borderRadius:11,padding:"11px 16px",color:C.text,fontFamily:"inherit",fontSize:13,
+    outline:"none",transition:"border-color .2s",
+  };
+
+  const SECTIONS = [
+    {id:"profile",  label:"Profil",          icon:"◎"},
+    {id:"security", label:"Sécurité",         icon:"🔐"},
+    {id:"notifs",   label:"Notifications",    icon:"◷"},
+    {id:"danger",   label:"Zone de danger",   icon:"⚠"},
+  ];
+
+  return(
+    <div style={{animation:"fadeUp .35s ease",maxWidth:820}}>
+      <div style={{marginBottom:28}}>
+        <div style={{fontSize:10,color:C.primary,letterSpacing:3,marginBottom:8,fontWeight:600}}>MON COMPTE</div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:isMobile?24:32,fontWeight:800,color:C.text}}>Gérer mon compte</h2>
+        <p style={{fontSize:12,color:C.textSub,marginTop:6}}>Informations personnelles, sécurité et préférences.</p>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"200px 1fr",gap:16,alignItems:"start"}}>
+
+        {/* Sidebar nav */}
+        <div style={{...glass,padding:8,borderRadius:14}}>
+          {/* Avatar block */}
+          <div style={{padding:"16px 12px 12px",textAlign:"center",borderBottom:`1px solid ${C.border}`,marginBottom:8}}>
+            <div style={{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,#7c3aed,#c084fc)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:"#fff",margin:"0 auto 10px"}}>
+              {(user?.name||"A")[0].toUpperCase()}
+            </div>
+            <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:2}}>{user?.name}</div>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:8}}>{user?.email}</div>
+            <div style={{display:"inline-flex",alignItems:"center",gap:5,background:`${plan?.color}18`,border:`1px solid ${plan?.color}30`,borderRadius:99,padding:"3px 10px"}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:plan?.color}}/>
+              <span style={{fontSize:9,color:plan?.color,fontWeight:600,letterSpacing:1}}>{plan?.name?.toUpperCase()||"AUCUN"}</span>
+            </div>
+          </div>
+          {SECTIONS.map(s=>(
+            <button key={s.id} onClick={()=>setSection(s.id)} style={{
+              display:"flex",alignItems:"center",gap:9,width:"100%",
+              background:section===s.id?"rgba(139,92,246,.12)":"transparent",
+              color:section===s.id?C.primaryLight:s.id==="danger"?"#f472b6":C.textSub,
+              border:"none",borderRadius:9,
+              borderLeft:`2px solid ${section===s.id?C.primary:s.id==="danger"?"rgba(244,114,182,.3)":"transparent"}`,
+              padding:"9px 12px",fontFamily:"inherit",fontSize:12,fontWeight:section===s.id?600:400,
+              cursor:"pointer",textAlign:"left",transition:"all .15s",
+            }}>
+              <span style={{fontSize:13}}>{s.icon}</span>{s.label}
+            </button>
+          ))}
+          <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+            <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:9,width:"100%",background:"transparent",color:C.textMuted,border:"none",borderRadius:9,padding:"9px 12px",fontFamily:"inherit",fontSize:12,cursor:"pointer",textAlign:"left",transition:"all .15s"}}
+              onMouseEnter={e=>e.currentTarget.style.color="#f472b6"}
+              onMouseLeave={e=>e.currentTarget.style.color=C.textMuted}>
+              <span>⎋</span> Se déconnecter
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+          {/* ─ PROFILE ─ */}
+          {section==="profile"&&(
+            <>
+              <div style={{...glass,padding:"22px 24px"}}>
+                <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:18,fontWeight:600}}>INFORMATIONS PERSONNELLES</div>
+                <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                  <div>
+                    <div style={{fontSize:11,color:C.textSub,marginBottom:6,fontWeight:500}}>Nom complet</div>
+                    <input style={inp} value={profile.name} onChange={e=>setProfile(p=>({...p,name:e.target.value}))}
+                      onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"} onBlur={e=>e.target.style.borderColor=C.border}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:C.textSub,marginBottom:6,fontWeight:500}}>Adresse email</div>
+                    <input style={inp} value={profile.email} onChange={e=>setProfile(p=>({...p,email:e.target.value}))}
+                      onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"} onBlur={e=>e.target.style.borderColor=C.border}/>
+                  </div>
+                </div>
+              </div>
+              <div style={{...glass,padding:"18px 24px"}}>
+                <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:14,fontWeight:600}}>ABONNEMENT ACTUEL</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,color:plan?.color||C.textSub,fontWeight:800}}>{plan?.name||"Aucun abonnement"}</div>
+                    <div style={{fontSize:11,color:C.textSub,marginTop:4}}>{isUnlimited?"Crédits illimités":`${credits} crédits restants ce mois`}</div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>setSection("billing")} style={{background:"rgba(139,92,246,.12)",border:"1px solid rgba(139,92,246,.3)",color:C.primaryLight,borderRadius:10,padding:"8px 16px",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>Changer de plan</button>
+                  </div>
+                </div>
+              </div>
+              <button onClick={saveProfile} style={{
+                padding:"13px",background:"linear-gradient(135deg,#7c3aed,#a855f7,#c084fc)",
+                backgroundSize:"200% 200%",animation:"gradPan 3s ease infinite",
+                color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer",
+                boxShadow:"0 6px 20px rgba(139,92,246,.35)",transition:"all .15s",
+              }}>
+                {saved?"✓ Modifications enregistrées":"Enregistrer les modifications"}
+              </button>
+            </>
+          )}
+
+          {/* ─ SECURITY ─ */}
+          {section==="security"&&(
+            <>
+              <div style={{...glass,padding:"22px 24px"}}>
+                <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:18,fontWeight:600}}>CHANGER LE MOT DE PASSE</div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  {[
+                    {label:"Mot de passe actuel",key:"current",ph:"••••••••"},
+                    {label:"Nouveau mot de passe",key:"next",  ph:"••••••••"},
+                    {label:"Confirmer",           key:"confirm",ph:"••••••••"},
+                  ].map(f=>(
+                    <div key={f.key}>
+                      <div style={{fontSize:11,color:C.textSub,marginBottom:6,fontWeight:500}}>{f.label}</div>
+                      <input type="password" style={inp} placeholder={f.ph} value={pwFields[f.key]}
+                        onChange={e=>setPwFields(p=>({...p,[f.key]:e.target.value}))}
+                        onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"} onBlur={e=>e.target.style.borderColor=C.border}/>
+                    </div>
+                  ))}
+                </div>
+                <button style={{marginTop:16,padding:"11px 24px",background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",border:"none",borderRadius:10,fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>Mettre à jour</button>
+              </div>
+              <div style={{...glass,padding:"22px 24px"}}>
+                <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:14,fontWeight:600}}>SESSIONS ACTIVES</div>
+                {[
+                  {device:"Chrome · macOS",    ip:"192.168.1.1", date:"Maintenant",  current:true},
+                  {device:"Safari · iPhone 15",ip:"192.168.1.8", date:"Il y a 2h",   current:false},
+                  {device:"Firefox · Windows", ip:"82.65.12.44", date:"Il y a 3 jours",current:false},
+                ].map((s,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:i<2?`1px solid ${C.border}`:"none",flexWrap:"wrap",gap:8}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:12,color:C.text,fontWeight:500}}>{s.device}</span>
+                        {s.current&&<span style={{fontSize:9,color:"#4ade80",background:"rgba(74,222,128,.12)",padding:"2px 8px",borderRadius:99,fontWeight:600}}>ACTUELLE</span>}
+                      </div>
+                      <div style={{fontSize:10,color:C.textMuted,marginTop:2}}>{s.ip} · {s.date}</div>
+                    </div>
+                    {!s.current&&<button style={{background:"rgba(244,114,182,.08)",border:"1px solid rgba(244,114,182,.2)",color:"#f472b6",borderRadius:8,padding:"5px 12px",fontFamily:"inherit",fontSize:10,fontWeight:600,cursor:"pointer"}}>Révoquer</button>}
+                  </div>
+                ))}
+              </div>
+              <div style={{...glass,padding:"18px 24px"}}>
+                <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:14,fontWeight:600}}>DOUBLE AUTHENTIFICATION</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:12,color:C.text,fontWeight:500,marginBottom:4}}>Authentification à deux facteurs</div>
+                    <div style={{fontSize:11,color:C.textSub}}>Sécurisez votre compte avec une application TOTP.</div>
+                  </div>
+                  <button style={{background:"rgba(139,92,246,.12)",border:"1px solid rgba(139,92,246,.3)",color:C.primaryLight,borderRadius:10,padding:"8px 16px",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>Activer</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ─ NOTIFICATIONS ─ */}
+          {section==="notifs"&&(
+            <div style={{...glass,padding:"22px 24px"}}>
+              <div style={{fontSize:10,color:C.textMuted,letterSpacing:2,marginBottom:18,fontWeight:600}}>PRÉFÉRENCES DE NOTIFICATIONS</div>
+              {[
+                {key:"email_generation",label:"Génération terminée",       sub:"Email quand une IA finit de traiter"},
+                {key:"email_billing",   label:"Facturation & crédits",     sub:"Renouvellements, achats, faible solde"},
+                {key:"email_promo",     label:"Offres & nouveautés",       sub:"Nouveaux outils, promotions Créaly"},
+                {key:"push_done",       label:"Notifications push",        sub:"Alerte navigateur à chaque résultat"},
+              ].map((n,i,arr)=>(
+                <div key={n.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+                  <div>
+                    <div style={{fontSize:12,color:C.text,fontWeight:500,marginBottom:3}}>{n.label}</div>
+                    <div style={{fontSize:11,color:C.textSub}}>{n.sub}</div>
+                  </div>
+                  <div onClick={()=>setNotifs(prev=>({...prev,[n.key]:!prev[n.key]}))} style={{
+                    width:44,height:24,borderRadius:99,cursor:"pointer",
+                    background:notifs[n.key]?"linear-gradient(135deg,#7c3aed,#a855f7)":"rgba(255,255,255,.08)",
+                    border:`1px solid ${notifs[n.key]?"transparent":C.border}`,
+                    position:"relative",transition:"all .25s",flexShrink:0,
+                  }}>
+                    <div style={{position:"absolute",top:2,left:notifs[n.key]?22:2,width:18,height:18,borderRadius:"50%",background:"#fff",transition:"left .25s",boxShadow:"0 1px 4px rgba(0,0,0,.3)"}}/>
+                  </div>
+                </div>
+              ))}
+              <button onClick={()=>setSaved(true)&&setTimeout(()=>setSaved(false),2000)} style={{marginTop:16,padding:"11px 24px",background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",border:"none",borderRadius:10,fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                Enregistrer
+              </button>
+            </div>
+          )}
+
+          {/* ─ DANGER ZONE ─ */}
+          {section==="danger"&&(
+            <>
+              <div style={{...glass,padding:"22px 24px",border:"1px solid rgba(244,114,182,.15)"}}>
+                <div style={{fontSize:10,color:"#f472b6",letterSpacing:2,marginBottom:18,fontWeight:600}}>ZONE DE DANGER</div>
+                <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                  {[
+                    {title:"Exporter mes données",    sub:"Téléchargez toutes vos générations et données personnelles.",  btnLabel:"Exporter",  btnColor:"#a78bfa",bg:"rgba(167,139,250,.08)",bd:"rgba(167,139,250,.2)"},
+                    {title:"Réinitialiser mes crédits",sub:"Supprime l'historique de crédit sans supprimer le compte.",   btnLabel:"Réinitialiser",btnColor:"#fbbf24",bg:"rgba(251,191,36,.08)",bd:"rgba(251,191,36,.2)"},
+                  ].map((a,i)=>(
+                    <div key={i} style={{background:a.bg,border:`1px solid ${a.bd}`,borderRadius:12,padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+                      <div>
+                        <div style={{fontSize:12,color:C.text,fontWeight:600,marginBottom:3}}>{a.title}</div>
+                        <div style={{fontSize:11,color:C.textSub}}>{a.sub}</div>
+                      </div>
+                      <button style={{background:"transparent",border:`1px solid ${a.bd}`,color:a.btnColor,borderRadius:9,padding:"8px 16px",fontFamily:"inherit",fontSize:11,fontWeight:600,cursor:"pointer"}}>{a.btnLabel}</button>
+                    </div>
+                  ))}
+                  {/* Delete account */}
+                  <div style={{background:"rgba(244,114,182,.06)",border:"1px solid rgba(244,114,182,.2)",borderRadius:12,padding:"16px 18px"}}>
+                    <div style={{fontSize:12,color:"#f472b6",fontWeight:700,marginBottom:4}}>Supprimer mon compte</div>
+                    <div style={{fontSize:11,color:C.textSub,marginBottom:14}}>Action irréversible. Toutes vos données et générations seront définitivement supprimées.</div>
+                    {!delConfirm?(
+                      <button onClick={()=>setDelConfirm(true)} style={{background:"rgba(244,114,182,.1)",border:"1px solid rgba(244,114,182,.3)",color:"#f472b6",borderRadius:9,padding:"9px 18px",fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer"}}>Supprimer mon compte</button>
+                    ):(
+                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:11,color:C.textSub}}>Êtes-vous sûr ?</span>
+                        <button onClick={onLogout} style={{background:"#f472b6",color:"#000",border:"none",borderRadius:9,padding:"8px 18px",fontFamily:"inherit",fontSize:11,fontWeight:700,cursor:"pointer"}}>Oui, supprimer</button>
+                        <button onClick={()=>setDelConfirm(false)} style={{background:"rgba(255,255,255,.06)",border:`1px solid ${C.border}`,color:C.textSub,borderRadius:9,padding:"8px 14px",fontFamily:"inherit",fontSize:11,cursor:"pointer"}}>Annuler</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AUTH PAGE ─────────────────────────────────────────────────
+function AuthPage({isMobile,authMode,setAuthMode,onSuccess}){
+  const [fields,setFields] = useState({email:"",password:"",name:"",confirm:""});
+  const [loading,setLoading] = useState(false);
+  const [error,setError]   = useState("");
+
+  const inp2 = {
+    width:"100%",background:"rgba(255,255,255,.04)",border:`1px solid ${C.border}`,
+    borderRadius:11,padding:"12px 16px",color:C.text,fontFamily:"inherit",fontSize:13,
+    outline:"none",transition:"border-color .2s",
+  };
+
+  function handleSubmit(){
+    setError("");
+    if(!fields.email||!fields.password){setError("Veuillez remplir tous les champs."); return;}
+    if(authMode==="signup"&&fields.password!==fields.confirm){setError("Les mots de passe ne correspondent pas."); return;}
+    if(authMode==="forgot"){setLoading(true); setTimeout(()=>{setLoading(false);setAuthMode("login");setError("Email de réinitialisation envoyé !");},1500); return;}
+    setLoading(true);
+    setTimeout(()=>{ setLoading(false); onSuccess({email:fields.email,name:fields.name||fields.email.split("@")[0]}); },1800);
+  }
+
+  return(
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",fontFamily:"'Inter',system-ui,sans-serif",padding:"24px 16px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0;}@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}input:focus{outline:none;border-color:rgba(139,92,246,.5)!important;box-shadow:0 0 0 3px rgba(139,92,246,.08);}`}</style>
+      <AnimatedBg/>
+
+      <div style={{position:"relative",zIndex:1,width:"100%",maxWidth:420,animation:"fadeUp .35s ease"}}>
+        {/* Logo */}
+        <div style={{textAlign:"center",marginBottom:36}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:32,fontWeight:800,letterSpacing:2,background:"linear-gradient(135deg,#a78bfa,#c084fc)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:4}}>CRÉALY</div>
+          <div style={{fontSize:11,color:C.textMuted,letterSpacing:3}}>AI PLATFORM</div>
+        </div>
+
+        {/* Card */}
+        <div style={{background:"rgba(255,255,255,.04)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",border:`1px solid ${C.border}`,borderRadius:20,padding:isMobile?"24px 20px":"32px 36px"}}>
+
+          {/* Title */}
+          <div style={{marginBottom:24}}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:C.text,marginBottom:6}}>
+              {authMode==="login"?"Bon retour 👋":authMode==="signup"?"Créer un compte":("Mot de passe oublié")}
+            </h2>
+            <p style={{fontSize:12,color:C.textSub}}>
+              {authMode==="login"?"Connectez-vous à votre espace Créaly.":authMode==="signup"?"Rejoignez Créaly et commencez à créer.":"Entrez votre email pour réinitialiser votre mot de passe."}
+            </p>
+          </div>
+
+          {/* OAuth buttons */}
+          {authMode!=="forgot"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+              {[
+                {icon:"🍎",label:"Continuer avec Apple",bg:"#000",border:"rgba(255,255,255,.15)"},
+                {icon:"G",  label:"Continuer avec Google",bg:"rgba(255,255,255,.06)",border:C.border,textColor:C.text},
+              ].map((o,i)=>(
+                <button key={i} onClick={()=>onSuccess({email:"user@example.com",name:"Alex Martin"})} style={{
+                  width:"100%",padding:"12px",display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+                  background:o.bg,border:`1px solid ${o.border}`,borderRadius:11,
+                  color:o.textColor||"#fff",fontFamily:"inherit",fontSize:13,fontWeight:500,cursor:"pointer",
+                  transition:"opacity .15s",
+                }}>
+                  <span style={{fontSize:16,fontWeight:700}}>{o.icon}</span>{o.label}
+                </button>
+              ))}
+              {/* Divider */}
+              <div style={{display:"flex",alignItems:"center",gap:12,margin:"4px 0"}}>
+                <div style={{flex:1,height:1,background:C.border}}/>
+                <span style={{fontSize:11,color:C.textMuted}}>ou</span>
+                <div style={{flex:1,height:1,background:C.border}}/>
+              </div>
+            </div>
+          )}
+
+          {/* Fields */}
+          <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
+            {authMode==="signup"&&(
+              <div>
+                <div style={{fontSize:11,color:C.textSub,marginBottom:6,fontWeight:500}}>Nom complet</div>
+                <input style={inp2} placeholder="Jean Dupont" value={fields.name}
+                  onChange={e=>setFields(f=>({...f,name:e.target.value}))}
+                  onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"}
+                  onBlur={e=>e.target.style.borderColor=C.border}/>
+              </div>
+            )}
+            <div>
+              <div style={{fontSize:11,color:C.textSub,marginBottom:6,fontWeight:500}}>Adresse email</div>
+              <input style={inp2} type="email" placeholder="vous@email.com" value={fields.email}
+                onChange={e=>setFields(f=>({...f,email:e.target.value}))}
+                onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"}
+                onBlur={e=>e.target.style.borderColor=C.border}/>
+            </div>
+            {authMode!=="forgot"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:11,color:C.textSub,fontWeight:500}}>Mot de passe</span>
+                  {authMode==="login"&&<button onClick={()=>setAuthMode("forgot")} style={{background:"none",border:"none",color:C.primary,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Mot de passe oublié ?</button>}
+                </div>
+                <input style={inp2} type="password" placeholder="••••••••" value={fields.password}
+                  onChange={e=>setFields(f=>({...f,password:e.target.value}))}
+                  onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"}
+                  onBlur={e=>e.target.style.borderColor=C.border}/>
+              </div>
+            )}
+            {authMode==="signup"&&(
+              <div>
+                <div style={{fontSize:11,color:C.textSub,marginBottom:6,fontWeight:500}}>Confirmer le mot de passe</div>
+                <input style={inp2} type="password" placeholder="••••••••" value={fields.confirm}
+                  onChange={e=>setFields(f=>({...f,confirm:e.target.value}))}
+                  onFocus={e=>e.target.style.borderColor="rgba(139,92,246,.5)"}
+                  onBlur={e=>e.target.style.borderColor=C.border}/>
+              </div>
+            )}
+          </div>
+
+          {/* Error / info */}
+          {error&&(
+            <div style={{padding:"10px 14px",background:error.includes("envoyé")?"rgba(74,222,128,.1)":"rgba(244,114,182,.1)",border:`1px solid ${error.includes("envoyé")?"rgba(74,222,128,.3)":"rgba(244,114,182,.3)"}`,borderRadius:10,fontSize:12,color:error.includes("envoyé")?"#4ade80":"#f472b6",marginBottom:14}}>
+              {error}
+            </div>
+          )}
+
+          {/* CGU mention */}
+          {authMode==="signup"&&(
+            <p style={{fontSize:10,color:C.textMuted,marginBottom:14,lineHeight:1.6}}>
+              En créant un compte, vous acceptez nos <span style={{color:C.primary,cursor:"pointer"}}>Conditions d'utilisation</span> et notre <span style={{color:C.primary,cursor:"pointer"}}>Politique de confidentialité</span>.
+            </p>
+          )}
+
+          {/* Submit */}
+          <button onClick={handleSubmit} disabled={loading} style={{
+            width:"100%",padding:"14px",
+            background:loading?"rgba(139,92,246,.3)":"linear-gradient(135deg,#7c3aed,#a855f7,#c084fc)",
+            backgroundSize:"200% 200%",
+            animation:!loading?"gradPan 3s ease infinite":"none",
+            color:"#fff",border:"none",borderRadius:12,fontFamily:"inherit",fontSize:14,fontWeight:700,
+            cursor:loading?"not-allowed":"pointer",
+            boxShadow:"0 8px 28px rgba(139,92,246,.35)",marginBottom:16,
+          }}>
+            {loading?(
+              <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+                <span style={{width:14,height:14,border:"2px solid rgba(255,255,255,.3)",borderTop:"2px solid #fff",borderRadius:"50%",display:"inline-block",animation:"spin .7s linear infinite"}}/>
+                {authMode==="forgot"?"Envoi en cours...":"Connexion..."}
+              </span>
+            ):authMode==="login"?"Se connecter":authMode==="signup"?"Créer mon compte":"Envoyer le lien"}
+          </button>
+
+          {/* Switch mode */}
+          <div style={{textAlign:"center",fontSize:12,color:C.textSub}}>
+            {authMode==="login"?(
+              <>Pas encore de compte ?{" "}<button onClick={()=>{setAuthMode("signup");setError("");}} style={{background:"none",border:"none",color:C.primary,fontFamily:"inherit",fontSize:12,fontWeight:600,cursor:"pointer"}}>S'inscrire</button></>
+            ):authMode==="signup"?(
+              <>Déjà un compte ?{" "}<button onClick={()=>{setAuthMode("login");setError("");}} style={{background:"none",border:"none",color:C.primary,fontFamily:"inherit",fontSize:12,fontWeight:600,cursor:"pointer"}}>Se connecter</button></>
+            ):(
+              <button onClick={()=>{setAuthMode("login");setError("");}} style={{background:"none",border:"none",color:C.primary,fontFamily:"inherit",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Retour à la connexion</button>
+            )}
+          </div>
+        </div>
+
+        {/* Remboursement mention */}
+        <p style={{textAlign:"center",fontSize:10,color:C.textMuted,marginTop:16,lineHeight:1.6}}>
+          🛡️ Satisfait ou remboursé sous 7 jours · Aucun engagement
+        </p>
+      </div>
+    </div>
+  );
+}
