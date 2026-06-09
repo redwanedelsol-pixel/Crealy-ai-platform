@@ -455,6 +455,116 @@ footer{border-top:1px solid var(--border);padding:64px 0 32px;
 .footer-tag{padding:3px 10px;border-radius:50px;font-size:.7rem;font-weight:600;
   background:rgba(124,58,237,.1);border:1px solid var(--border);color:var(--muted)}
 
+/* ─── PROMPT BOX (ai-prompt-box port) ───────────── */
+.pb{background:rgba(31,32,35,.96);border:1.5px solid rgba(68,68,68,.7);
+  border-radius:24px;padding:10px 14px 8px;
+  transition:border-color .3s,box-shadow .3s;position:relative}
+.pb.drag-over{border-color:var(--v4)!important;background:rgba(124,58,237,.06)}
+.pb.recording{border-color:rgba(239,68,68,.65)!important}
+.pb.is-loading{border-color:rgba(239,68,68,.5)!important}
+
+/* file previews */
+.pb-files{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.pb-file-thumb{width:64px;height:64px;border-radius:12px;overflow:hidden;
+  position:relative;cursor:pointer;flex-shrink:0;
+  border:1px solid rgba(255,255,255,.08);transition:transform .2s}
+.pb-file-thumb:hover{transform:scale(1.06)}
+.pb-file-thumb img,.pb-file-thumb video{width:100%;height:100%;object-fit:cover}
+.pb-file-rm{position:absolute;top:3px;right:3px;width:18px;height:18px;
+  background:rgba(0,0,0,.72);border:none;border-radius:50%;color:#fff;
+  font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .2s}
+.pb-file-rm:hover{background:rgba(239,68,68,.85)}
+
+/* textarea */
+.pb-ta{width:100%;background:transparent;border:none;outline:none;
+  color:#f0eeff;font-family:var(--fb);font-size:.95rem;line-height:1.65;
+  resize:none;min-height:46px;max-height:240px;overflow-y:auto;padding:6px 0}
+.pb-ta::placeholder{color:#7c7a9e}
+.pb-ta::-webkit-scrollbar{width:4px}
+.pb-ta::-webkit-scrollbar-thumb{background:#444;border-radius:2px}
+
+/* voice recorder */
+.pb-rec{display:none;flex-direction:column;align-items:center;padding:12px 0 8px;gap:10px}
+.pb-rec-header{display:flex;align-items:center;gap:8px}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;
+  animation:recPulse 1s ease-in-out infinite}
+@keyframes recPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.82)}}
+.rec-time{font-family:monospace;font-size:.88rem;color:rgba(240,238,255,.7)}
+.pb-bar-viz{display:flex;align-items:center;gap:2px;height:40px;width:100%;padding:0 8px}
+.pb-bar-item{flex:1;background:rgba(255,255,255,.28);border-radius:2px;
+  animation:barDance linear infinite alternate;transform-origin:bottom}
+@keyframes barDance{from{transform:scaleY(.12)}to{transform:scaleY(1)}}
+
+/* bottom bar */
+.pb-bottom{display:flex;align-items:center;justify-content:space-between;padding-top:6px}
+.pb-left-acts{display:flex;align-items:center;gap:2px;
+  transition:opacity .25s,visibility .25s}
+.pb-left-acts.hidden{opacity:0;visibility:hidden}
+
+/* attach icon button */
+.pb-ib{width:32px;height:32px;border-radius:50%;background:transparent;border:none;
+  color:#9ca3af;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .2s,color .2s;flex-shrink:0}
+.pb-ib:hover{background:rgba(255,255,255,.09);color:#d1d5db}
+.pb-ib:disabled{opacity:.35;pointer-events:none}
+
+/* toggle buttons */
+.pb-tog{display:flex;align-items:center;gap:4px;height:32px;padding:0 8px;
+  border-radius:50px;border:1px solid transparent;background:transparent;
+  color:#9ca3af;cursor:pointer;font-size:.74rem;font-family:var(--fb);font-weight:500;
+  transition:color .2s,background .2s,border-color .2s;white-space:nowrap;flex-shrink:0}
+.pb-tog:hover{color:#d1d5db}
+.pb-tog:disabled{opacity:.35;pointer-events:none}
+.pb-tog svg{flex-shrink:0;transition:transform .35s cubic-bezier(.34,1.56,.64,1)}
+.pb-tog:hover svg{transform:rotate(18deg) scale(1.12)}
+.pb-tog.active svg{transform:rotate(360deg) scale(1.12)}
+/* animated label – width transition */
+.pb-tog-lbl{max-width:0;overflow:hidden;opacity:0;
+  transition:max-width .28s cubic-bezier(.16,1,.3,1),opacity .22s}
+.pb-tog.active .pb-tog-lbl{max-width:80px;opacity:1}
+/* active colors per toggle */
+.pb-tog[data-t="search"].active{color:#1eaedb;background:rgba(30,174,219,.12);border-color:#1eaedb}
+.pb-tog[data-t="think"].active{color:#8b5cf6;background:rgba(139,92,246,.12);border-color:#8b5cf6}
+.pb-tog[data-t="canvas"].active{color:#f97316;background:rgba(249,115,22,.12);border-color:#f97316}
+.pb-tog[data-t="search"]:not(.active):hover{color:#1eaedb}
+.pb-tog[data-t="think"]:not(.active):hover{color:#8b5cf6}
+.pb-tog[data-t="canvas"]:not(.active):hover{color:#f97316}
+
+/* vertical divider (gradient diamond) */
+.pb-vsep{width:1.5px;height:24px;flex-shrink:0;margin:0 2px;border-radius:1px;
+  background:linear-gradient(to bottom,transparent 0%,rgba(155,135,245,.55) 50%,transparent 100%)}
+
+/* send button states */
+.pb-send{width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:all .25s cubic-bezier(.34,1.56,.64,1)}
+.pb-send.s-empty{background:transparent;color:#9ca3af}
+.pb-send.s-empty:hover{background:rgba(255,255,255,.09);color:#d1d5db}
+.pb-send.s-content{background:#fff;color:#12121e;box-shadow:0 0 16px rgba(255,255,255,.18)}
+.pb-send.s-content:hover{background:rgba(255,255,255,.88);transform:scale(1.12)}
+.pb-send.s-loading{background:#fff;color:#12121e}
+.pb-send.s-loading svg{animation:pbPulse 1s ease-in-out infinite}
+@keyframes pbPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pb-send.s-recording{background:transparent;color:#ef4444}
+.pb-send.s-recording:hover{background:rgba(239,68,68,.1);transform:scale(1.12)}
+
+/* full-image lightbox */
+.pb-imgview{position:fixed;inset:0;z-index:600;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.88);backdrop-filter:blur(8px);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.pb-imgview.open{opacity:1;pointer-events:all}
+.pb-imgview-inner{position:relative;border-radius:16px;overflow:hidden;
+  transform:scale(.92);transition:transform .35s cubic-bezier(.16,1,.3,1);
+  max-width:90vw;max-height:86vh}
+.pb-imgview.open .pb-imgview-inner{transform:scale(1)}
+.pb-imgview-inner img{display:block;max-width:100%;max-height:86vh;object-fit:contain}
+.pb-imgview-close{position:absolute;top:10px;right:10px;width:32px;height:32px;
+  border-radius:50%;background:rgba(20,20,30,.84);border:none;color:#fff;cursor:pointer;
+  font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .2s}
+.pb-imgview-close:hover{background:rgba(239,68,68,.72)}
+
 /* ─── REVEAL ────────────────────────────────────── */
 .reveal{opacity:0;transform:translateY(36px);
   transition:opacity .8s cubic-bezier(.16,1,.3,1),transform .8s cubic-bezier(.16,1,.3,1)}
@@ -834,20 +944,7 @@ footer{border-top:1px solid var(--border);padding:64px 0 32px;
         💰 Coût : <span class="cost-badge" id="mCost">5 crédits</span>
         <span style="margin-left:auto;font-size:.8rem;color:var(--muted)">Solde : <strong id="mBalance" style="color:var(--v4)">0</strong> crédits</span>
       </div>
-      <div>
-        <div class="upload-zone" id="upZone">
-          <input type="file" id="fileIn" multiple accept="image/*,video/*" style="position:absolute;inset:0;opacity:0;cursor:pointer" onchange="onFiles(this.files)">
-          <span class="upload-icon">📂</span>
-          <p class="upload-text"><strong>Glissez-déposez vos fichiers</strong> ou cliquez pour parcourir</p>
-          <p style="font-size:.76rem;color:var(--muted)">Images (JPG, PNG, WEBP) · Vidéos (MP4, MOV) · Max 100MB</p>
-          <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="document.getElementById('fileIn').click();event.stopPropagation()">Parcourir</button>
-        </div>
-        <div class="preview-grid" id="prevGrid" style="margin-top:12px"></div>
-      </div>
-      <div>
-        <label class="field-label">Instructions / Prompt</label>
-        <textarea class="field" id="agPrompt" placeholder="Décrivez ce que vous souhaitez créer..."></textarea>
-      </div>
+      <!-- Platform selector (video agent only) -->
       <div id="platSel" style="display:none">
         <label class="field-label">Format de sortie</label>
         <div class="platform-opts">
@@ -856,7 +953,79 @@ footer{border-top:1px solid var(--border);padding:64px 0 32px;
           <label class="platform-opt"><input type="radio" name="plat" value="shorts"> YT Shorts (9:16)</label>
         </div>
       </div>
-      <button class="gen-btn" id="genBtn" onclick="generate()">✨ Générer maintenant</button>
+
+      <!-- AI Prompt Box -->
+      <div class="pb" id="pb">
+        <!-- File previews row -->
+        <div class="pb-files" id="pbFiles" style="display:none"></div>
+
+        <!-- Textarea (hidden during voice recording) -->
+        <div id="pbInput">
+          <textarea class="pb-ta" id="pbTa" rows="1"
+            placeholder="Décrivez ce que vous souhaitez créer..."></textarea>
+        </div>
+
+        <!-- Voice recorder UI -->
+        <div class="pb-rec" id="pbRec">
+          <div class="pb-rec-header">
+            <div class="rec-dot"></div>
+            <span class="rec-time" id="recTime">00:00</span>
+          </div>
+          <div class="pb-bar-viz" id="pbBarViz"></div>
+        </div>
+
+        <!-- Bottom action bar -->
+        <div class="pb-bottom">
+          <div class="pb-left-acts" id="pbLeftActs">
+            <!-- Attach file -->
+            <button class="pb-ib" id="pbAttachBtn" title="Importer un fichier">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <input type="file" id="pbFileIn" multiple accept="image/*,video/*" style="display:none">
+
+            <!-- Search toggle -->
+            <button class="pb-tog" id="pbSearchBtn" data-t="search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              <span class="pb-tog-lbl">Recherche</span>
+            </button>
+            <div class="pb-vsep"></div>
+
+            <!-- Think toggle -->
+            <button class="pb-tog" id="pbThinkBtn" data-t="think">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+              </svg>
+              <span class="pb-tog-lbl">Réfléchir</span>
+            </button>
+            <div class="pb-vsep"></div>
+
+            <!-- Canvas toggle -->
+            <button class="pb-tog" id="pbCanvasBtn" data-t="canvas">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+              </svg>
+              <span class="pb-tog-lbl">Canvas</span>
+            </button>
+          </div>
+
+          <!-- Send / Stop / Mic button -->
+          <button class="pb-send s-empty" id="pbSendBtn" title="Envoyer">
+            <svg id="pbSendSvg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+        </div>
+      </div>
       <div class="result-sec" id="resultSec">
         <div class="result-label">Résultat généré</div>
         <div class="result-box" id="resultBox">
@@ -874,6 +1043,14 @@ footer{border-top:1px solid var(--border);padding:64px 0 32px;
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ───── IMAGE LIGHTBOX ─────────────────────────── -->
+<div class="pb-imgview" id="pbImgView" onclick="PB.closeImg(event)">
+  <div class="pb-imgview-inner">
+    <img id="pbImgViewImg" src="" alt="Aperçu">
+    <button class="pb-imgview-close" onclick="PB.closeImg()">✕</button>
   </div>
 </div>
 
@@ -1037,58 +1214,252 @@ function renderPricing(){
 }
 renderPricing();
 
+// ─── PromptBox module (port of ai-prompt-box.tsx) ────
+const PB={
+  _val:'',_files:[],_previews:{},
+  _rec:false,_recSec:0,_recIv:null,
+  _loading:false,
+  _search:false,_think:false,_canvas:false,
+
+  init(){
+    const ta=document.getElementById('pbTa');
+    const fileIn=document.getElementById('pbFileIn');
+    const pb=document.getElementById('pb');
+
+    // auto-resize textarea
+    ta.addEventListener('input',()=>{
+      this._val=ta.value;
+      ta.style.height='auto';
+      ta.style.height=Math.min(ta.scrollHeight,240)+'px';
+      this._syncBtn();
+    });
+    ta.addEventListener('keydown',e=>{
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();this._send()}
+    });
+
+    // file attach
+    document.getElementById('pbAttachBtn').addEventListener('click',()=>fileIn.click());
+    fileIn.addEventListener('change',e=>{this._addFiles(e.target.files);e.target.value=''});
+
+    // drag & drop on prompt box
+    pb.addEventListener('dragover',e=>{e.preventDefault();pb.classList.add('drag-over')});
+    pb.addEventListener('dragleave',e=>{if(!pb.contains(e.relatedTarget))pb.classList.remove('drag-over')});
+    pb.addEventListener('drop',e=>{e.preventDefault();pb.classList.remove('drag-over');this._addFiles(e.dataTransfer.files)});
+
+    // clipboard paste (image)
+    document.addEventListener('paste',e=>{
+      if(!document.getElementById('agentOvl').classList.contains('open'))return;
+      const items=e.clipboardData?.items;
+      if(!items)return;
+      for(let i=0;i<items.length;i++){
+        if(items[i].type.indexOf('image')!==-1){
+          const f=items[i].getAsFile();
+          if(f){e.preventDefault();this._addFiles([f]);break}
+        }
+      }
+    });
+
+    // toggle buttons (Search / Think / Canvas)
+    document.querySelectorAll('.pb-tog').forEach(btn=>{
+      btn.addEventListener('click',()=>this._toggle(btn.dataset.t));
+    });
+
+    // send / mic / stop button
+    document.getElementById('pbSendBtn').addEventListener('click',()=>this._send());
+
+    this._buildBars();
+    this._syncBtn();
+  },
+
+  _addFiles(fileList){
+    Array.from(fileList).forEach(f=>{
+      if(this._files.length>=6){toast('Maximum 6 fichiers','error');return}
+      this._files.push(f);
+      const rdr=new FileReader();
+      rdr.onload=ev=>{
+        this._previews[f.name]=ev.target.result;
+        this._renderPreviews();
+        this._syncBtn();
+      };
+      rdr.readAsDataURL(f);
+    });
+  },
+
+  _renderPreviews(){
+    const el=document.getElementById('pbFiles');
+    el.innerHTML='';
+    if(this._files.length===0){el.style.display='none';return}
+    el.style.display='flex';
+    this._files.forEach((f,i)=>{
+      const wrap=document.createElement('div');
+      wrap.className='pb-file-thumb';
+      const src=this._previews[f.name]||'';
+      if(src&&f.type.startsWith('image/')){
+        wrap.innerHTML=`<img src="${src}" alt="">`;
+        wrap.addEventListener('click',()=>this.openImg(src));
+      } else if(src){
+        wrap.innerHTML=`<video src="${src}"></video>`;
+      }
+      const rm=document.createElement('button');
+      rm.className='pb-file-rm';rm.textContent='✕';
+      rm.addEventListener('click',e=>{e.stopPropagation();this._rmFile(i)});
+      wrap.appendChild(rm);el.appendChild(wrap);
+    });
+  },
+
+  _rmFile(i){
+    if(this._files[i])delete this._previews[this._files[i].name];
+    this._files.splice(i,1);
+    this._renderPreviews();this._syncBtn();
+  },
+
+  _toggle(type){
+    if(type==='search'){this._search=!this._search;this._think=false;this._canvas=false}
+    else if(type==='think'){this._think=!this._think;this._search=false;this._canvas=false}
+    else if(type==='canvas'){this._canvas=!this._canvas;this._search=false;this._think=false}
+    document.getElementById('pbSearchBtn').classList.toggle('active',this._search);
+    document.getElementById('pbThinkBtn').classList.toggle('active',this._think);
+    document.getElementById('pbCanvasBtn').classList.toggle('active',this._canvas);
+    const ta=document.getElementById('pbTa');
+    if(this._search)ta.placeholder='Rechercher sur le web...';
+    else if(this._think)ta.placeholder='Réfléchir en profondeur...';
+    else if(this._canvas)ta.placeholder='Créer sur le canvas...';
+    else ta.placeholder='Décrivez ce que vous souhaitez créer...';
+  },
+
+  _send(){
+    if(this._loading)return;
+    if(this._rec){this._stopRec();return}
+    const has=this._val.trim()!==''||this._files.length>0;
+    if(has)generate();
+    else this._startRec();
+  },
+
+  _startRec(){
+    this._rec=true;this._recSec=0;
+    document.getElementById('pb').classList.add('recording');
+    document.getElementById('pbInput').style.display='none';
+    document.getElementById('pbRec').style.display='flex';
+    document.getElementById('pbLeftActs').classList.add('hidden');
+    this._syncBtn();
+    this._recIv=setInterval(()=>{
+      this._recSec++;
+      const m=Math.floor(this._recSec/60).toString().padStart(2,'0');
+      const s=(this._recSec%60).toString().padStart(2,'0');
+      document.getElementById('recTime').textContent=`${m}:${s}`;
+    },1000);
+  },
+
+  _stopRec(){
+    this._rec=false;clearInterval(this._recIv);
+    const dur=this._recSec;this._recSec=0;
+    document.getElementById('pb').classList.remove('recording');
+    document.getElementById('pbInput').style.display='block';
+    document.getElementById('pbRec').style.display='none';
+    document.getElementById('pbLeftActs').classList.remove('hidden');
+    document.getElementById('recTime').textContent='00:00';
+    this._syncBtn();
+    toast(`Message vocal de ${dur}s enregistré`,'success');
+  },
+
+  _buildBars(){
+    const c=document.getElementById('pbBarViz');
+    if(!c)return;
+    c.innerHTML='';
+    for(let i=0;i<32;i++){
+      const b=document.createElement('div');b.className='pb-bar-item';
+      b.style.cssText=`height:${Math.max(12,Math.random()*100)}%;animation-delay:${i*.055}s;animation-duration:${.45+Math.random()*.55}s`;
+      c.appendChild(b);
+    }
+  },
+
+  _syncBtn(){
+    const btn=document.getElementById('pbSendBtn');
+    const svg=document.getElementById('pbSendSvg');
+    if(!btn)return;
+    const has=this._val.trim()!==''||this._files.length>0;
+    btn.className='pb-send';
+    if(this._loading){
+      btn.classList.add('s-loading');
+      svg.innerHTML='<rect x="5" y="5" width="14" height="14" rx="2"/>';
+    } else if(this._rec){
+      btn.classList.add('s-recording');
+      svg.innerHTML='<circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/>';
+    } else if(has){
+      btn.classList.add('s-content');
+      svg.innerHTML='<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
+    } else {
+      btn.classList.add('s-empty');
+      svg.innerHTML='<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>';
+    }
+  },
+
+  setLoading(v){
+    this._loading=v;
+    document.getElementById('pb')?.classList.toggle('is-loading',v);
+    document.querySelectorAll('.pb-ib,.pb-tog').forEach(el=>el.disabled=v);
+    this._syncBtn();
+  },
+
+  getValue(){return this._val},
+  getFiles(){return this._files},
+
+  reset(){
+    this._val='';this._files=[];this._previews={};
+    this._search=false;this._think=false;this._canvas=false;
+    this._rec=false;clearInterval(this._recIv);
+    const ta=document.getElementById('pbTa');
+    if(ta){ta.value='';ta.style.height='auto';ta.placeholder='Décrivez ce que vous souhaitez créer...'}
+    const pf=document.getElementById('pbFiles');
+    if(pf){pf.style.display='none';pf.innerHTML=''}
+    document.getElementById('pbInput').style.display='block';
+    document.getElementById('pbRec').style.display='none';
+    document.getElementById('pbLeftActs')?.classList.remove('hidden');
+    document.getElementById('pb')?.classList.remove('recording','is-loading','drag-over');
+    document.querySelectorAll('.pb-tog').forEach(b=>b.classList.remove('active'));
+    document.getElementById('recTime').textContent='00:00';
+    this._buildBars();
+    this._syncBtn();
+  },
+
+  openImg(src){
+    document.getElementById('pbImgViewImg').src=src;
+    document.getElementById('pbImgView').classList.add('open');
+  },
+  closeImg(e){
+    if(e&&!e.target.classList.contains('pb-imgview')&&!e.target.classList.contains('pb-imgview-close'))return;
+    document.getElementById('pbImgView').classList.remove('open');
+    setTimeout(()=>{document.getElementById('pbImgViewImg').src=''},300);
+  }
+};
+
 // ─── Agent modal ──────────────────────────────────────
 function openAgent(type){
   if(!S.user){openAuth('signup');return}
-  const ag=AGENTS[type];S.agent=type;S.files=[];
+  const ag=AGENTS[type];S.agent=type;
   document.getElementById('mAvatarImg').src=ag.avatar;
   document.getElementById('mName').textContent=ag.name;
   document.getElementById('mRole').textContent=ag.role;
   document.getElementById('mCost').textContent=`${ag.cost} crédits`;
   document.getElementById('mBalance').textContent=S.credits;
-  document.getElementById('prevGrid').innerHTML='';
-  document.getElementById('agPrompt').value='';
   document.getElementById('resultSec').classList.remove('show');
   document.getElementById('platSel').style.display=type==='video'?'block':'none';
+  PB.reset();
   openOvl('agentOvl');
 }
-
-// ─── File upload ──────────────────────────────────────
-const upZone=document.getElementById('upZone');
-upZone.addEventListener('dragover',e=>{e.preventDefault();upZone.classList.add('drag-over')});
-upZone.addEventListener('dragleave',()=>upZone.classList.remove('drag-over'));
-upZone.addEventListener('drop',e=>{e.preventDefault();upZone.classList.remove('drag-over');onFiles(e.dataTransfer.files)});
-function onFiles(files){
-  Array.from(files).forEach(f=>{
-    if(S.files.length>=6){toast('Maximum 6 fichiers','error');return}
-    S.files.push(f);
-    const r=new FileReader();
-    r.onload=ev=>{
-      const g=document.getElementById('prevGrid');
-      const d=document.createElement('div');d.className='prev-thumb';
-      const idx=S.files.length-1;
-      d.innerHTML=f.type.startsWith('image/')?
-        `<img src="${ev.target.result}"><button class="prev-rm" onclick="rmFile(${idx})">✕</button>`:
-        `<video src="${ev.target.result}"></video><button class="prev-rm" onclick="rmFile(${idx})">✕</button>`;
-      g.appendChild(d);
-    };
-    r.readAsDataURL(f);
-  });
-}
-function rmFile(i){S.files.splice(i,1);document.getElementById('prevGrid').children[i]?.remove()}
 
 // ─── Generate ─────────────────────────────────────────
 function generate(){
   const ag=AGENTS[S.agent];
   if(S.credits<ag.cost){toast('Crédits insuffisants','error');return}
-  const prompt=document.getElementById('agPrompt').value.trim();
-  if(!prompt&&S.files.length===0){toast('Ajoutez un fichier ou décrivez votre demande','error');return}
+  const prompt=PB.getValue().trim();
+  if(!prompt&&PB.getFiles().length===0){toast('Ajoutez un fichier ou décrivez votre demande','error');return}
+  PB.setLoading(true);
   document.getElementById('resultSec').classList.add('show');
   document.getElementById('loadState').style.display='flex';
   document.getElementById('resImg').style.display='none';
   document.getElementById('resVid').style.display='none';
   document.getElementById('resActions').style.display='none';
-  document.getElementById('genBtn').disabled=true;
   const bar=document.getElementById('pbar');
   const steps=['Analyse de la demande...','Génération en cours...','Optimisation...','Finalisation...'];
   let prog=0,si=0;
@@ -1101,12 +1472,13 @@ function generate(){
     saved.credits=S.credits;localStorage.setItem('crealy_user',JSON.stringify(saved));
     updateUI();
     setTimeout(()=>{
+      PB.setLoading(false);
       document.getElementById('loadState').style.display='none';
       document.getElementById('resActions').style.display='flex';
-      document.getElementById('genBtn').disabled=false;
       const img=document.getElementById('resImg');
-      if(S.agent==='image'&&S.files.length>0){
-        const rd=new FileReader();rd.onload=e=>{img.src=e.target.result;img.style.display='block'};rd.readAsDataURL(S.files[0]);
+      const files=PB.getFiles();
+      if(S.agent==='image'&&files.length>0){
+        const rd=new FileReader();rd.onload=e=>{img.src=e.target.result;img.style.display='block'};rd.readAsDataURL(files[0]);
       }else{img.src=`https://picsum.photos/seed/${Date.now()}/800/450`;img.style.display='block'}
       toast(`Génération terminée ! -${ag.cost} crédits`,'success');
     },400);
@@ -1115,8 +1487,7 @@ function generate(){
 function resetGen(){
   document.getElementById('resultSec').classList.remove('show');
   document.getElementById('pbar').style.width='0%';
-  S.files=[];document.getElementById('prevGrid').innerHTML='';
-  document.getElementById('agPrompt').value='';
+  PB.reset();
 }
 
 // ─── Subscribe ────────────────────────────────────────
@@ -1220,6 +1591,9 @@ function toast(msg,type='success'){
   const s=localStorage.getItem('crealy_user');
   if(s){try{loginUser(JSON.parse(s))}catch(e){}}
 })();
+
+// ─── Init PromptBox ───────────────────────────────────
+PB.init();
 </script>
 </body>
 </html>
